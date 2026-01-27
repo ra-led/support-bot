@@ -60,6 +60,11 @@ export async function clarifyRequest(requestId: string, text: string) {
   return response.data
 }
 
+export async function submitRequest(requestId: string) {
+  const response = await api.post(`/v1/requests/${requestId}/submit`)
+  return response.data
+}
+
 export async function fetchStats() {
   const response = await api.get('/v1/admin/stats')
   return response.data

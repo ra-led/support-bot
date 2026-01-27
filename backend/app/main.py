@@ -128,6 +128,14 @@ async def clarify_request(request_id: str, payload: ClarifyRequest) -> Dict[str,
     return updated_request
 
 
+@app.post("/v1/requests/{request_id}/submit")
+async def submit_request(request_id: str) -> Dict[str, Any]:
+    request = storage.get_request(request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return storage.update_request(request_id, {"status": "submitted"})
+
+
 @app.get("/v1/requests/{request_id}")
 async def get_request(request_id: str) -> Dict[str, Any]:
     request = storage.get_request(request_id)
