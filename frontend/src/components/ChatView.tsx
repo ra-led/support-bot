@@ -35,12 +35,23 @@ export default function ChatView() {
   const [input, setInput] = useState('')
   const [email, setEmail] = useState('')
   const [emailReady, setEmailReady] = useState(false)
+  const [rememberSession, setRememberSession] = useState(false)
   const [requestList, setRequestList] = useState<RequestSummary[]>([])
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
   const [pendingRequest, setPendingRequest] = useState<RequestSummary | null>(null)
   const [isSending, setIsSending] = useState(false)
   const [correctionRequestId, setCorrectionRequestId] = useState<string | null>(null)
   const feedRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const storedEmail = localStorage.getItem('supportBotEmail')
+    if (storedEmail) {
+      setEmail(storedEmail)
+      setEmailReady(true)
+      setRememberSession(true)
+      loadRequests(storedEmail)
+    }
+  }, [])
 
   const appendMessage = (content: ReactNode, id: number) => {
     setMessages((prev) => [...prev, { id, content }])
@@ -236,6 +247,11 @@ export default function ChatView() {
     const normalized = email.trim().toLowerCase()
     setEmail(normalized)
     setEmailReady(true)
+    if (rememberSession) {
+      localStorage.setItem('supportBotEmail', normalized)
+    } else {
+      localStorage.removeItem('supportBotEmail')
+    }
     await loadRequests(normalized)
   }
 
@@ -260,9 +276,9 @@ export default function ChatView() {
 
   if (!emailReady) {
     return (
-      <div className="chat-card">
+      <div className="chat-card contact-screen">
         <h2>Requester Chat</h2>
-        <p className="tag">Enter your contact email to start</p>
+        <p className="muted">Enter your contact email to start</p>
         <div className="contact-form">
           <label htmlFor="contact-email">Contact email</label>
           <input
@@ -272,6 +288,14 @@ export default function ChatView() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={rememberSession}
+              onChange={(event) => setRememberSession(event.target.checked)}
+            />
+            <span>Use cookies to remember me</span>
+          </label>
           <button type="button" onClick={handleEmailSubmit}>
             Start conversation
           </button>
@@ -314,7 +338,6 @@ export default function ChatView() {
       </aside>
       <div className="chat-card">
         <h2>Requester Chat</h2>
-        <p className="tag">Messenger-style slot filling</p>
         <div className="chat-feed" ref={feedRef}>
           {messages.map((message, index) => (
             <div

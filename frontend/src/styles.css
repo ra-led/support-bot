@@ -110,6 +110,12 @@ a {
   height: calc(100vh - 160px);
 }
 
+.contact-screen {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
 .chat-feed {
   display: flex;
   flex-direction: column;
@@ -183,6 +189,7 @@ a {
   flex-direction: column;
   gap: 12px;
   margin-top: 16px;
+  width: min(360px, 90%);
 }
 
 .contact-form input {
@@ -200,6 +207,19 @@ a {
   border-radius: 12px;
   cursor: pointer;
   align-self: flex-start;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.checkbox-row input {
+  width: 16px;
+  height: 16px;
 }
 
 .tag {
@@ -279,6 +299,8 @@ a {
   max-height: 80vh;
   overflow: hidden;
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
