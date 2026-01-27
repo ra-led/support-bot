@@ -10,10 +10,10 @@ export default function App() {
           <strong>Facility Intake Bot</strong>
         </div>
         <nav className="nav-links">
-          <NavLink to="/" className="nes-btn">
+          <NavLink to="/" className="nes-btn is-primary">
             Chat
           </NavLink>
-          <NavLink to="/admin" className="nes-btn">
+          <NavLink to="/admin" className="nes-btn is-primary">
             Admin
           </NavLink>
         </nav>

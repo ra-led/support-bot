@@ -92,8 +92,8 @@ export default function AdminView() {
             <div key={request.request_id} className="request-card nes-container">
               <div className="request-header">
                 <strong>{request.title}</strong>
-                <span className="nes-badge">
-                  <span className={statusBadgeClass(request.status)}>{request.status}</span>
+                <span className={`nes-badge ${statusBadgeClass(request.status)}`}>
+                  {request.status}
                 </span>
               </div>
               <p className="muted">{request.description}</p>
@@ -144,7 +144,7 @@ export default function AdminView() {
               <div className="request-meta">
                 <button
                   type="button"
-                  className="link-button nes-btn"
+                  className="link-button nes-btn is-primary"
                   onClick={() => handleOpenConversation(request)}
                 >
                   View conversation
@@ -163,7 +163,11 @@ export default function AdminView() {
           >
             <div className="modal-header">
               <h4>Conversation: {activeConversation.title}</h4>
-              <button type="button" onClick={() => setActiveConversation(null)} className="nes-btn">
+              <button
+                type="button"
+                onClick={() => setActiveConversation(null)}
+                className="nes-btn is-warning"
+              >
                 Close
               </button>
             </div>

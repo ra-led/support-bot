@@ -230,14 +230,14 @@ export default function ChatView() {
         <button
           type="button"
           onClick={() => handleSubmit(requestId)}
-          className="nes-btn primary"
+          className="nes-btn is-success"
         >
           Submit
         </button>
         <button
           type="button"
           onClick={() => handleCorrection(requestId)}
-          className="nes-btn warning"
+          className="nes-btn is-warning"
         >
           Need correction
         </button>
@@ -325,7 +325,7 @@ export default function ChatView() {
             />
             <span>Use cookies to remember me</span>
           </label>
-          <button type="button" onClick={handleEmailSubmit} className="nes-btn primary">
+          <button type="button" onClick={handleEmailSubmit} className="nes-btn is-primary">
             Start conversation
           </button>
         </div>
@@ -341,7 +341,7 @@ export default function ChatView() {
             <strong>Conversations</strong>
             <p className="muted">{email}</p>
           </div>
-          <button type="button" onClick={handleNewRequest} className="nes-btn">
+          <button type="button" onClick={handleNewRequest} className="nes-btn is-warning">
             New request
           </button>
         </div>
@@ -359,9 +359,7 @@ export default function ChatView() {
                 onClick={() => handleSelectRequest(request.request_id)}
               >
                 <span>{request.title}</span>
-                <span className="nes-badge">
-                  <span className={statusClass(request.status)}>{request.status}</span>
-                </span>
+                <span className={`nes-badge ${statusClass(request.status)}`}>{request.status}</span>
               </button>
             ))
           )}
@@ -376,11 +374,7 @@ export default function ChatView() {
                 key={`${message.id}-${index}`}
                 className={`message ${message.id === 0 ? '-right' : '-left'}`}
               >
-                {message.id !== 0 ? (
-                  <i className="nes-octocat animate">
-                    <span />
-                  </i>
-                ) : null}
+                {message.id !== 0 ? <i className="nes-octocat animate" /> : null}
                 <div
                   className={`nes-balloon ${
                     message.id === 0 ? 'from-right' : 'from-left is-dark'
@@ -392,9 +386,7 @@ export default function ChatView() {
             ))}
             {isSending ? (
               <section className="message -left">
-                <i className="nes-octocat animate">
-                  <span />
-                </i>
+                <i className="nes-octocat animate" />
                 <div className="nes-balloon from-left is-dark">
                   <p>{typingDots || '.'}</p>
                 </div>
@@ -421,7 +413,7 @@ export default function ChatView() {
             type="button"
             onClick={pendingRequest ? handleClarify : handleSend}
             disabled={isSending}
-            className="nes-btn"
+            className="nes-btn is-primary"
           >
             {pendingRequest ? 'Send answer' : 'Send'}
           </button>
