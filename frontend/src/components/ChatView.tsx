@@ -1,6 +1,10 @@
 import { useState } from 'react'
-import { ChatFeed, Message } from 'react-chat-ui'
 import { clarifyRequest, sendMessage } from '../api'
+
+type ChatMessage = {
+  id: number
+  text: string
+}
 
 interface RequestSummary {
   request_id: string
@@ -11,18 +15,18 @@ interface RequestSummary {
 }
 
 export default function ChatView() {
-  const [messages, setMessages] = useState<Message[]>([
-    new Message({
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
       id: 1,
-      message: 'Hi! Describe the facility issue and I will draft the request.'
-    })
+      text: 'Hi! Describe the facility issue and I will draft the request.'
+    }
   ])
   const [input, setInput] = useState('')
   const [pendingRequest, setPendingRequest] = useState<RequestSummary | null>(null)
   const [isSending, setIsSending] = useState(false)
 
   const appendMessage = (text: string, id: number) => {
-    setMessages((prev) => [...prev, new Message({ id, message: text })])
+    setMessages((prev) => [...prev, { id, text }])
   }
 
   const handleSend = async () => {
@@ -91,14 +95,17 @@ export default function ChatView() {
     <div className="chat-card">
       <h2>Requester Chat</h2>
       <p className="tag">Messenger-style slot filling</p>
-      <ChatFeed
-        messages={messages}
-        showSenderName
-        bubbleStyles={{
-          text: { fontSize: 14 },
-          chatbubble: { borderRadius: 16, padding: 12 }
-        }}
-      />
+      <div className="chat-feed">
+        {messages.map((message, index) => (
+          <div
+            key={`${message.id}-${index}`}
+            className={`chat-bubble ${message.id === 0 ? 'from-user' : 'from-bot'}`}
+          >
+            <span className="chat-sender">{message.id === 0 ? 'You' : 'Bot'}</span>
+            <p>{message.text}</p>
+          </div>
+        ))}
+      </div>
       <div className="chat-input">
         <textarea
           placeholder={pendingRequest ? 'Answer the follow-up question…' : 'Describe the issue…'}

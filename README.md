@@ -5,7 +5,7 @@ Containerized MVP for the facility/repair request intake service described in `D
 ## What’s included
 
 - **Python + FastAPI backend** with LLM slot-filling (`/v1/intake/text`) and clarification flow (`/v1/requests/{id}/clarify`).
-- **Messenger-style requester UI** using the open-source [`react-chat-ui`](https://github.com/brandonmowat/react-chat-ui) component.
+- **Messenger-style requester UI** with a lightweight custom chat layout to keep dependencies minimal.
 - **Separated admin stats screen** for quick operational visibility.
 - **Docker + docker-compose** for local boot.
 
