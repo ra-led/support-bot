@@ -6,7 +6,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="navbar nes-container">
-        <div>
+        <div className="header-title">
           <strong>Facility Intake Bot</strong>
         </div>
         <nav className="nav-links">

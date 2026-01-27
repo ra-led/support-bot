@@ -7,6 +7,7 @@
 body {
   font-family: 'Press Start 2P', 'Courier New', monospace;
   background: #f4f4f5;
+  font-size: 14px;
 }
 
 .nes-container {
@@ -23,6 +24,8 @@ body {
   padding: 8px 14px;
   cursor: pointer;
   box-shadow: 0 4px 0 #111827;
+  font-weight: 700;
+  font-size: 14px;
 }
 
 .nes-btn.primary {
@@ -53,7 +56,7 @@ body {
   border: 4px solid var(--nes-border);
   padding: 8px 12px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
   background: #fff;
 }
 
@@ -82,6 +85,11 @@ body {
   max-width: 70%;
 }
 
+.nes-balloon p {
+  font-size: 14px;
+  margin: 0;
+}
+
 .nes-balloon.from-left::before,
 .nes-balloon.from-right::before {
   content: '';
@@ -102,19 +110,75 @@ body {
   right: -10px;
 }
 
-.nes-bcrikko {
+.nes-balloon.is-dark {
+  background: #0f172a;
+  color: #fff;
+}
+
+.nes-balloon.is-dark::before {
+  background: #0f172a;
+}
+
+.nes-octocat {
   width: 36px;
   height: 36px;
   border-radius: 4px;
-  background: #94a3b8;
+  background: #111827;
   border: 4px solid var(--nes-border);
   box-shadow: 0 4px 0 #111827;
+}
+
+.nes-octocat.animate {
+  animation: bob 1.2s infinite ease-in-out;
 }
 
 .nes-badge {
   border: 3px solid var(--nes-border);
   padding: 4px 8px;
   background: #e2e8f0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.nes-badge span {
+  padding: 2px 6px;
+}
+
+.nes-badge .is-dark {
+  background: #0f172a;
+  color: #fff;
+}
+
+.nes-badge .is-primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.nes-badge .is-success {
+  background: #22c55e;
+  color: #0f172a;
+}
+
+.nes-badge .is-warning {
+  background: #facc15;
+  color: #0f172a;
+}
+
+.nes-badge .is-error {
+  background: #ef4444;
+  color: #fff;
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 .nes-checkbox {

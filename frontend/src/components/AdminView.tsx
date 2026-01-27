@@ -29,6 +29,19 @@ interface RequestItem {
   clarifying_questions?: string[]
 }
 
+const statusBadgeClass = (status: string) => {
+  switch (status) {
+    case 'submitted':
+      return 'is-success'
+    case 'ready':
+      return 'is-primary'
+    case 'needs_clarification':
+      return 'is-warning'
+    default:
+      return 'is-dark'
+  }
+}
+
 export default function AdminView() {
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [requests, setRequests] = useState<RequestItem[]>([])
@@ -70,7 +83,7 @@ export default function AdminView() {
           ))}
       </div>
 
-      <h3 style={{ marginTop: '24px' }}>Extracted requests</h3>
+      <h2 style={{ marginTop: '24px' }}>Extracted requests</h2>
       <div className="request-list">
         {requests.length === 0 ? (
           <p className="muted">No requests yet.</p>
@@ -79,13 +92,17 @@ export default function AdminView() {
             <div key={request.request_id} className="request-card nes-container">
               <div className="request-header">
                 <strong>{request.title}</strong>
-                <span className="nes-badge">{request.status}</span>
+                <span className="nes-badge">
+                  <span className={statusBadgeClass(request.status)}>{request.status}</span>
+                </span>
               </div>
               <p className="muted">{request.description}</p>
               <div className="request-meta">
-                <span>Urgency: {request.urgency}</span>
                 <span>
-                  Location:{' '}
+                  <strong>Urgency:</strong> {request.urgency}
+                </span>
+                <span>
+                  <strong>Location:</strong>{' '}
                   {request.location?.room ||
                     request.location?.floor ||
                     request.location?.building ||
@@ -94,21 +111,34 @@ export default function AdminView() {
                 </span>
               </div>
               <div className="request-meta">
-                <span>Email: {request.reporter_email || 'Unknown'}</span>
+                <span>
+                  <strong>Email:</strong> {request.reporter_email || 'Unknown'}
+                </span>
               </div>
               <div className="request-meta">
-                <span>Facilities: {request.taxonomy?.facilities_area || 'Unknown'}</span>
-                <span>Service: {request.taxonomy?.impacted_service || 'Unknown'}</span>
-                <span>Type: {request.taxonomy?.request_type || 'Unknown'}</span>
+                <span>
+                  <strong>Facilities:</strong>{' '}
+                  {request.taxonomy?.facilities_area || 'Unknown'}
+                </span>
+                <span>
+                  <strong>Service:</strong> {request.taxonomy?.impacted_service || 'Unknown'}
+                </span>
+                <span>
+                  <strong>Type:</strong> {request.taxonomy?.request_type || 'Unknown'}
+                </span>
               </div>
               {request.missing_required_fields?.length ? (
                 <div className="request-meta">
-                  <span>Missing: {request.missing_required_fields.join(', ')}</span>
+                  <span>
+                    <strong>Missing:</strong> {request.missing_required_fields.join(', ')}
+                  </span>
                 </div>
               ) : null}
               {request.clarifying_questions?.length ? (
                 <div className="request-meta">
-                  <span>Next question: {request.clarifying_questions[0]}</span>
+                  <span>
+                    <strong>Next question:</strong> {request.clarifying_questions[0]}
+                  </span>
                 </div>
               ) : null}
               <div className="request-meta">

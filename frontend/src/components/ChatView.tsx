@@ -25,6 +25,19 @@ interface ConversationMessage {
   content: string
 }
 
+const statusClass = (status: string) => {
+  switch (status) {
+    case 'submitted':
+      return 'is-success'
+    case 'ready':
+      return 'is-primary'
+    case 'needs_clarification':
+      return 'is-warning'
+    default:
+      return 'is-dark'
+  }
+}
+
 export default function ChatView() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -340,13 +353,15 @@ export default function ChatView() {
               <button
                 key={request.request_id}
                 type="button"
-                className={`conversation-item ${
+                className={`conversation-item nes-container ${
                   selectedRequestId === request.request_id ? 'active' : ''
                 }`}
                 onClick={() => handleSelectRequest(request.request_id)}
               >
                 <span>{request.title}</span>
-                <span className="nes-badge">{request.status}</span>
+                <span className="nes-badge">
+                  <span className={statusClass(request.status)}>{request.status}</span>
+                </span>
               </button>
             ))
           )}
@@ -361,21 +376,20 @@ export default function ChatView() {
                 key={`${message.id}-${index}`}
                 className={`message ${message.id === 0 ? '-right' : '-left'}`}
               >
-                {message.id !== 0 ? <i className="nes-bcrikko" /> : null}
+                {message.id !== 0 ? <i className="nes-octocat animate" /> : null}
                 <div
                   className={`nes-balloon ${
-                    message.id === 0 ? 'from-right' : 'from-left'
+                    message.id === 0 ? 'from-right' : 'from-left is-dark'
                   }`}
                 >
                   <p>{message.content}</p>
                 </div>
-                {message.id === 0 ? <i className="nes-bcrikko" /> : null}
               </section>
             ))}
             {isSending ? (
               <section className="message -left">
-                <i className="nes-bcrikko" />
-                <div className="nes-balloon from-left">
+                <i className="nes-octocat animate" />
+                <div className="nes-balloon from-left is-dark">
                   <p>{typingDots || '.'}</p>
                 </div>
               </section>
