@@ -28,7 +28,7 @@ a {
 }
 
 .header-title {
-  font-size: 32px;
+  font-size: 24px;
 }
 
 .nav-links {
@@ -38,6 +38,7 @@ a {
 
 .nav-links .nes-btn {
   font-weight: 700;
+  font-size: 12px;
 }
 
 .main-content {
@@ -91,6 +92,18 @@ a {
   font-size: 13px;
   text-align: left;
   width: 100%;
+}
+
+.chat-feed .nes-balloon p {
+  font-size: 13px;
+}
+
+.chat-input .nes-textarea {
+  font-size: 13px;
+}
+
+.chat-input .nes-btn {
+  font-size: 12px;
 }
 
 .conversation-item.active {
