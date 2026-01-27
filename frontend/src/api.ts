@@ -64,3 +64,8 @@ export async function fetchStats() {
   const response = await api.get('/v1/admin/stats')
   return response.data
 }
+
+export async function fetchRequests() {
+  const response = await api.get('/v1/requests')
+  return response.data
+}

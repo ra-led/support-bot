@@ -136,6 +136,11 @@ async def get_request(request_id: str) -> Dict[str, Any]:
     return request
 
 
+@app.get("/v1/requests")
+async def list_requests() -> Dict[str, Any]:
+    return {"requests": storage.list_requests()}
+
+
 @app.get("/v1/taxonomy")
 async def get_taxonomy() -> Dict[str, Any]:
     return {"facilities_areas": storage.get_taxonomy()}
