@@ -1,6 +1,17 @@
 import axios from 'axios'
 
-const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5051'
+const resolveApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL
+  if (envUrl) {
+    return envUrl
+  }
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+  return 'http://localhost:5051'
+}
+
+const apiBaseUrl = resolveApiBaseUrl()
 
 const createMessageId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {

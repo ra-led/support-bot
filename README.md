@@ -26,6 +26,14 @@ export OPENAI_BASE_URL="https://api.proxyapi.ru/openai/v1"
 export OPENAI_MODEL="gpt-5.1-mini"
 ```
 
+### 1b) Point the frontend at the backend API (optional)
+
+When deploying remotely, set the frontend API base URL so the UI doesn't default to `localhost`:
+
+```bash
+export VITE_API_URL="https://your-backend.example.com"
+```
+
 ### 2) Run the containers
 
 ```bash
