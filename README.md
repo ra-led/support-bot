@@ -99,6 +99,6 @@ Returns a simple count of requests by status.
 
 ## Notes
 
-- Data is stored **in-memory** for simplicity; restarting the backend clears it.
+- Data is stored in a lightweight **SQLite** file (`data.db`) for simplicity.
 - The fallback parser still returns slot-filling prompts when the LLM key is missing.
 - The UI is intentionally messenger-like with bubble chat to make slot-filling feel native.

@@ -1,5 +1,11 @@
 import { ReactNode, useEffect, useRef, useState } from 'react'
-import { clarifyRequest, sendMessage, submitRequest } from '../api'
+import {
+  clarifyRequest,
+  fetchRequestMessages,
+  fetchRequestsForEmail,
+  sendMessage,
+  submitRequest
+} from '../api'
 
 type ChatMessage = {
   id: number
@@ -14,6 +20,11 @@ interface RequestSummary {
   clarifying_questions?: string[]
 }
 
+interface ConversationMessage {
+  sender: 'user' | 'bot'
+  content: string
+}
+
 export default function ChatView() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -22,6 +33,10 @@ export default function ChatView() {
     }
   ])
   const [input, setInput] = useState('')
+  const [email, setEmail] = useState('')
+  const [emailReady, setEmailReady] = useState(false)
+  const [requestList, setRequestList] = useState<RequestSummary[]>([])
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
   const [pendingRequest, setPendingRequest] = useState<RequestSummary | null>(null)
   const [isSending, setIsSending] = useState(false)
   const [correctionRequestId, setCorrectionRequestId] = useState<string | null>(null)
@@ -36,6 +51,29 @@ export default function ChatView() {
       feedRef.current.scrollTop = feedRef.current.scrollHeight
     }
   }, [messages, isSending])
+
+  const loadRequests = async (reporterEmail: string) => {
+    const data = await fetchRequestsForEmail(reporterEmail)
+    setRequestList(data.requests || [])
+  }
+
+  const loadConversation = async (requestId: string) => {
+    const data = await fetchRequestMessages(requestId)
+    const loaded = (data.messages as ConversationMessage[]).map((message) => ({
+      id: message.sender === 'user' ? 0 : 1,
+      content: message.content
+    }))
+    setMessages(
+      loaded.length
+        ? loaded
+        : [
+            {
+              id: 1,
+              content: 'No messages recorded yet.'
+            }
+          ]
+    )
+  }
 
   const handleSend = async () => {
     if (!input.trim() || isSending) return
@@ -70,7 +108,7 @@ export default function ChatView() {
         return
       }
 
-      const data = await sendMessage(text)
+      const data = await sendMessage(text, email)
       const request = data.requests?.[0]
       if (request) {
         appendMessage(
@@ -94,6 +132,17 @@ export default function ChatView() {
           appendActionButtons(request.request_id)
           setPendingRequest(null)
         }
+        setRequestList((prev) => [
+          {
+            request_id: request.request_id,
+            title: request.title,
+            urgency: request.urgency,
+            status: request.status,
+            clarifying_questions: request.clarifying_questions
+          },
+          ...prev
+        ])
+        setSelectedRequestId(request.request_id)
       } else {
         appendMessage('I could not detect an issue. Try rephrasing?', 1)
       }
@@ -164,6 +213,11 @@ export default function ChatView() {
     try {
       await submitRequest(requestId)
       appendMessage('Submitted ✅ Your request is on the way.', 1)
+      setRequestList((prev) =>
+        prev.map((item) =>
+          item.request_id === requestId ? { ...item, status: 'submitted' } : item
+        )
+      )
     } finally {
       setIsSending(false)
     }
@@ -177,50 +231,133 @@ export default function ChatView() {
     )
   }
 
-  return (
-    <div className="chat-card">
-      <h2>Requester Chat</h2>
-      <p className="tag">Messenger-style slot filling</p>
-      <div className="chat-feed" ref={feedRef}>
-        {messages.map((message, index) => (
-          <div
-            key={`${message.id}-${index}`}
-            className={`chat-bubble ${message.id === 0 ? 'from-user' : 'from-bot'}`}
-          >
-            <span className="chat-sender">{message.id === 0 ? 'You' : 'Bot'}</span>
-            <div className="chat-content">{message.content}</div>
-          </div>
-        ))}
-        {isSending ? (
-          <div className="chat-bubble from-bot typing">
-            <span className="chat-sender">Bot</span>
-            <div className="typing-dots">
-              <span />
-              <span />
-              <span />
-            </div>
-          </div>
-        ) : null}
+  const handleEmailSubmit = async () => {
+    if (!email.trim()) return
+    const normalized = email.trim().toLowerCase()
+    setEmail(normalized)
+    setEmailReady(true)
+    await loadRequests(normalized)
+  }
+
+  const handleSelectRequest = async (requestId: string) => {
+    setSelectedRequestId(requestId)
+    setPendingRequest(null)
+    setCorrectionRequestId(null)
+    await loadConversation(requestId)
+  }
+
+  const handleNewRequest = () => {
+    setSelectedRequestId(null)
+    setPendingRequest(null)
+    setCorrectionRequestId(null)
+    setMessages([
+      {
+        id: 1,
+        content: 'Describe the next facility issue and I will draft the request.'
+      }
+    ])
+  }
+
+  if (!emailReady) {
+    return (
+      <div className="chat-card">
+        <h2>Requester Chat</h2>
+        <p className="tag">Enter your contact email to start</p>
+        <div className="contact-form">
+          <label htmlFor="contact-email">Contact email</label>
+          <input
+            id="contact-email"
+            type="email"
+            placeholder="you@clinic.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <button type="button" onClick={handleEmailSubmit}>
+            Start conversation
+          </button>
+        </div>
       </div>
-      <div className="chat-input">
-        <textarea
-          placeholder={
-            correctionRequestId
-              ? 'Tell me what needs to change…'
-              : pendingRequest
-              ? 'Answer the follow-up question…'
-              : 'Describe the issue…'
-          }
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-        />
-        <button
-          type="button"
-          onClick={pendingRequest ? handleClarify : handleSend}
-          disabled={isSending}
-        >
-          {pendingRequest ? 'Send answer' : 'Send'}
-        </button>
+    )
+  }
+
+  return (
+    <div className="chat-layout">
+      <aside className="chat-sidebar">
+        <div className="sidebar-header">
+          <div>
+            <strong>Conversations</strong>
+            <p className="muted">{email}</p>
+          </div>
+          <button type="button" onClick={handleNewRequest}>
+            New request
+          </button>
+        </div>
+        <div className="sidebar-list">
+          {requestList.length === 0 ? (
+            <p className="muted">No requests yet.</p>
+          ) : (
+            requestList.map((request) => (
+              <button
+                key={request.request_id}
+                type="button"
+                className={`conversation-item ${
+                  selectedRequestId === request.request_id ? 'active' : ''
+                }`}
+                onClick={() => handleSelectRequest(request.request_id)}
+              >
+                <span>{request.title}</span>
+                <span className="tag">{request.status}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+      <div className="chat-card">
+        <h2>Requester Chat</h2>
+        <p className="tag">Messenger-style slot filling</p>
+        <div className="chat-feed" ref={feedRef}>
+          {messages.map((message, index) => (
+            <div
+              key={`${message.id}-${index}`}
+              className={`chat-bubble ${message.id === 0 ? 'from-user' : 'from-bot'}`}
+            >
+              <span className="chat-sender">{message.id === 0 ? 'You' : 'Bot'}</span>
+              <div className="chat-content">{message.content}</div>
+            </div>
+          ))}
+          {isSending ? (
+            <div className="chat-bubble from-bot typing">
+              <span className="chat-sender">Bot</span>
+              <div className="typing-dots">
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <div className="chat-input">
+          <textarea
+            placeholder={
+              correctionRequestId
+                ? 'Tell me what needs to change…'
+                : pendingRequest
+                ? 'Answer the follow-up question…'
+                : selectedRequestId
+                ? 'Add a follow-up to this request…'
+                : 'Describe the issue…'
+            }
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+          />
+          <button
+            type="button"
+            onClick={pendingRequest ? handleClarify : handleSend}
+            disabled={isSending}
+          >
+            {pendingRequest ? 'Send answer' : 'Send'}
+          </button>
+        </div>
       </div>
     </div>
   )
