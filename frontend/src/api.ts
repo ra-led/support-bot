@@ -1,12 +1,22 @@
 import axios from 'axios'
 
+const normalizeUrl = (value: string) => {
+  const trimmed = value.trim()
+  const noWeirdColon = trimmed.replace('/:', ':')
+  return noWeirdColon.replace(/\/$/, '')
+}
+
 const resolveApiBaseUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL
   if (envUrl) {
-    return envUrl
+    return normalizeUrl(envUrl)
   }
   if (typeof window !== 'undefined') {
-    return window.location.origin
+    const { hostname, protocol, port, origin } = window.location
+    if (port === '5173') {
+      return `${protocol}//${hostname}:5051`
+    }
+    return `${origin}/api`
   }
   return 'http://localhost:5051'
 }

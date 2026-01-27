@@ -34,6 +34,15 @@ When deploying remotely, set the frontend API base URL so the UI doesn't default
 export VITE_API_URL="https://your-backend.example.com"
 ```
 
+### Optional: Use the bundled nginx reverse proxy (recommended for remote)
+
+The `nginx` service serves the frontend and proxies `/api/*` to the backend to avoid CORS issues:
+
+- Frontend: `http://<host>:8080`
+- Backend via proxy: `http://<host>:8080/api/...`
+
+If you access the UI through nginx on port 8080, the frontend will automatically call `/api` on the same origin.
+
 ### 2) Run the containers
 
 ```bash
