@@ -36,7 +36,7 @@ docker-compose up --build
 
 - Requester chat UI: [http://localhost:5173](http://localhost:5173)
 - Admin stats view: [http://localhost:5173/admin](http://localhost:5173/admin)
-- Backend API: [http://localhost:5050/health](http://localhost:5050/health)
+- Backend API: [http://localhost:5051/health](http://localhost:5051/health)
 
 ## Service flow
 
