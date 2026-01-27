@@ -376,7 +376,11 @@ export default function ChatView() {
                 key={`${message.id}-${index}`}
                 className={`message ${message.id === 0 ? '-right' : '-left'}`}
               >
-                {message.id !== 0 ? <i className="nes-octocat animate" /> : null}
+                {message.id !== 0 ? (
+                  <i className="nes-octocat animate">
+                    <span />
+                  </i>
+                ) : null}
                 <div
                   className={`nes-balloon ${
                     message.id === 0 ? 'from-right' : 'from-left is-dark'
@@ -388,7 +392,9 @@ export default function ChatView() {
             ))}
             {isSending ? (
               <section className="message -left">
-                <i className="nes-octocat animate" />
+                <i className="nes-octocat animate">
+                  <span />
+                </i>
                 <div className="nes-balloon from-left is-dark">
                   <p>{typingDots || '.'}</p>
                 </div>

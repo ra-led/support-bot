@@ -15,6 +15,7 @@ body {
   border: 4px solid var(--nes-border);
   background: var(--nes-bg);
   box-shadow: 0 6px 0 #a1a1aa;
+  border-radius: 6px;
 }
 
 .nes-btn {
@@ -26,6 +27,7 @@ body {
   box-shadow: 0 4px 0 #111827;
   font-weight: 700;
   font-size: 14px;
+  color: #111827;
 }
 
 .nes-btn.primary {
@@ -83,6 +85,7 @@ body {
   background: #fff;
   box-shadow: 0 4px 0 #111827;
   max-width: 70%;
+  border-radius: 6px;
 }
 
 .nes-balloon p {
@@ -94,8 +97,8 @@ body {
 .nes-balloon.from-right::before {
   content: '';
   position: absolute;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   background: #fff;
   border: 4px solid var(--nes-border);
   transform: rotate(45deg);
@@ -103,11 +106,11 @@ body {
 }
 
 .nes-balloon.from-left::before {
-  left: -10px;
+  left: -12px;
 }
 
 .nes-balloon.from-right::before {
-  right: -10px;
+  right: -12px;
 }
 
 .nes-balloon.is-dark {
@@ -122,14 +125,43 @@ body {
 .nes-octocat {
   width: 36px;
   height: 36px;
-  border-radius: 4px;
-  background: #111827;
+  border-radius: 6px;
+  background: #f8f5e6;
   border: 4px solid var(--nes-border);
   box-shadow: 0 4px 0 #111827;
+  position: relative;
 }
 
 .nes-octocat.animate {
   animation: bob 1.2s infinite ease-in-out;
+}
+
+.nes-octocat::before,
+.nes-octocat::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 10px;
+  background: #111827;
+  top: 10px;
+}
+
+.nes-octocat::before {
+  left: 9px;
+}
+
+.nes-octocat::after {
+  right: 9px;
+}
+
+.nes-octocat span {
+  position: absolute;
+  width: 18px;
+  height: 6px;
+  background: #e11d48;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .nes-badge {
@@ -140,6 +172,7 @@ body {
   align-items: center;
   gap: 6px;
   font-size: 12px;
+  border-radius: 4px;
 }
 
 .nes-badge span {
