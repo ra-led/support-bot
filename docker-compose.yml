@@ -4,7 +4,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - '8000:8000'
+      - '5050:5050'
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.proxyapi.ru/openai/v1}
@@ -15,6 +15,6 @@ services:
     ports:
       - '5173:5173'
     environment:
-      VITE_API_URL: http://localhost:8000
+      VITE_API_URL: http://localhost:5050
     depends_on:
       - backend
