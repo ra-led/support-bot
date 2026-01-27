@@ -65,6 +65,11 @@ a {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sidebar-header button {
+  margin-top: 8px;
 }
 
 .sidebar-list {
@@ -85,11 +90,11 @@ a {
   cursor: pointer;
   font-size: 13px;
   text-align: left;
+  width: 100%;
 }
 
 .conversation-item.active {
-  border-color: #2563eb;
-  background: #e0e7ff;
+  outline: 2px solid #2563eb;
 }
 
 .chat-card {

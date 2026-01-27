@@ -317,9 +317,10 @@ export default function ChatView() {
             onChange={(event) => setEmail(event.target.value)}
             className="nes-input"
           />
-          <label className="checkbox-row nes-checkbox">
+          <label className="checkbox-row">
             <input
               type="checkbox"
+              className="nes-checkbox"
               checked={rememberSession}
               onChange={(event) => setRememberSession(event.target.checked)}
             />
@@ -353,7 +354,7 @@ export default function ChatView() {
               <button
                 key={request.request_id}
                 type="button"
-                className={`conversation-item nes-container ${
+                className={`nes-container conversation-item ${
                   selectedRequestId === request.request_id ? 'active' : ''
                 }`}
                 onClick={() => handleSelectRequest(request.request_id)}
@@ -374,7 +375,6 @@ export default function ChatView() {
                 key={`${message.id}-${index}`}
                 className={`message ${message.id === 0 ? '-right' : '-left'}`}
               >
-                {message.id !== 0 ? <i className="nes-octocat animate" /> : null}
                 <div
                   className={`nes-balloon ${
                     message.id === 0 ? 'from-right' : 'from-left is-dark'
@@ -386,7 +386,6 @@ export default function ChatView() {
             ))}
             {isSending ? (
               <section className="message -left">
-                <i className="nes-octocat animate" />
                 <div className="nes-balloon from-left is-dark">
                   <p>{typingDots || '.'}</p>
                 </div>
