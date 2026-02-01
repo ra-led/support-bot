@@ -7,6 +7,71 @@ from pydantic import BaseModel, Field
 from .llm import llm_client
 from .storage import storage
 
+REQUIRED_TAXONOMY_FIELDS = ("facilities_area", "impacted_service")
+LOCATION_DETAIL_FIELDS = ("building", "floor", "room", "free_text")
+
+
+def _clean_value(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned or cleaned.lower() in {"unknown", "n/a", "na", "none", "null"}:
+            return None
+        return cleaned
+    return str(value)
+
+
+def _normalize_request_item(item: Dict[str, Any], branch_id: str) -> Dict[str, Any]:
+    location = item.get("location") if isinstance(item.get("location"), dict) else {}
+    taxonomy = item.get("taxonomy") if isinstance(item.get("taxonomy"), dict) else {}
+
+    location = {
+        "site": _clean_value(location.get("site")) or branch_id,
+        "building": _clean_value(location.get("building")),
+        "floor": _clean_value(location.get("floor")),
+        "room": _clean_value(location.get("room")),
+        "free_text": _clean_value(location.get("free_text")),
+    }
+
+    taxonomy = {
+        "facilities_area": _clean_value(taxonomy.get("facilities_area")),
+        "impacted_service": _clean_value(taxonomy.get("impacted_service")),
+        "request_type": _clean_value(taxonomy.get("request_type")),
+    }
+
+    missing_required_fields: List[str] = []
+    for field in REQUIRED_TAXONOMY_FIELDS:
+        if not taxonomy.get(field):
+            missing_required_fields.append(field)
+
+    has_location_detail = any(location.get(field) for field in LOCATION_DETAIL_FIELDS)
+    if not has_location_detail:
+        missing_required_fields.append("location")
+
+    clarifying_questions: List[str] = []
+    if "location" in missing_required_fields:
+        clarifying_questions.append(
+            "Which site/branch and exact location (building/floor/room) is this in?"
+        )
+    if "facilities_area" in missing_required_fields:
+        clarifying_questions.append(
+            "Which facilities area does this relate to? (e.g., Plumbing, Access & Security)"
+        )
+    if "impacted_service" in missing_required_fields:
+        clarifying_questions.append(
+            "What service is impacted (e.g., toilets, doors, access cards)?"
+        )
+
+    return {
+        **item,
+        "location": location,
+        "taxonomy": taxonomy,
+        "missing_required_fields": missing_required_fields,
+        "clarifying_questions": clarifying_questions,
+        "status": "needs_clarification" if missing_required_fields else "ready",
+    }
+
 
 class UserContext(BaseModel):
     name: Optional[str] = None
@@ -55,25 +120,24 @@ async def intake_text(payload: IntakeRequest) -> Dict[str, Any]:
     extraction = llm_client.extract_requests(payload.message_text)
     requests_output = []
     for item in extraction.get("requests", []):
+        normalized = _normalize_request_item(item, payload.branch_id)
         record = storage.create_request(
             {
                 "tenant_id": payload.tenant_id,
                 "branch_id": payload.branch_id,
                 "source_message_id": payload.message_id,
                 "reporter_email": payload.reporter_email,
-                "title": item.get("title"),
-                "description": item.get("description"),
-                "urgency": item.get("urgency"),
-                "location": item.get("location"),
-                "taxonomy": item.get("taxonomy"),
-                "safety_or_access_impact": item.get("safety_or_access_impact"),
-                "assets": item.get("assets", []),
-                "missing_required_fields": item.get("missing_required_fields", []),
-                "clarifying_questions": item.get("clarifying_questions", []),
-                "confidence": item.get("confidence", {}),
-                "status": "needs_clarification"
-                if item.get("missing_required_fields")
-                else "ready",
+                "title": normalized.get("title"),
+                "description": normalized.get("description"),
+                "urgency": normalized.get("urgency"),
+                "location": normalized.get("location"),
+                "taxonomy": normalized.get("taxonomy"),
+                "safety_or_access_impact": normalized.get("safety_or_access_impact"),
+                "assets": normalized.get("assets", []),
+                "missing_required_fields": normalized.get("missing_required_fields", []),
+                "clarifying_questions": normalized.get("clarifying_questions", []),
+                "confidence": normalized.get("confidence", {}),
+                "status": normalized.get("status"),
             }
         )
         storage.add_message(record["request_id"], "user", payload.message_text)
@@ -106,7 +170,7 @@ async def clarify_request(request_id: str, payload: ClarifyRequest) -> Dict[str,
             f"Existing request: {request.get('description')}\nUser update: {payload.additional_text}"
         )
         if extraction.get("requests"):
-            enriched = extraction["requests"][0]
+            enriched = _normalize_request_item(extraction["requests"][0], request.get("branch_id"))
             updated_request = storage.update_request(
                 request_id,
                 {
@@ -122,9 +186,7 @@ async def clarify_request(request_id: str, payload: ClarifyRequest) -> Dict[str,
                     "missing_required_fields": enriched.get("missing_required_fields", []),
                     "clarifying_questions": enriched.get("clarifying_questions", []),
                     "confidence": enriched.get("confidence", request.get("confidence")),
-                    "status": "needs_clarification"
-                    if enriched.get("missing_required_fields")
-                    else "ready",
+                    "status": enriched.get("status", "ready"),
                 },
             )
             summary = f"Updated request: {updated_request.get('title')} ({updated_request.get('status')})."

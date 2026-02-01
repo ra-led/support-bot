@@ -7,51 +7,302 @@ from typing import Any, Dict, List, Optional
 
 DEFAULT_TAXONOMY = [
     {
-        "id": "A1",
-        "label": "Plumbing",
-        "impacted_services": [
-            {
-                "id": "S1",
-                "label": "Blockages",
-                "request_types": [
-                    {"id": "R1", "label": "Toilet"},
-                    {"id": "R2", "label": "Sink"},
-                ],
-            },
-            {
-                "id": "S2",
-                "label": "Leaks",
-                "request_types": [
-                    {"id": "R3", "label": "Pipe"},
-                    {"id": "R4", "label": "Faucet"},
-                ],
-            },
-        ],
-    },
-    {
-        "id": "A2",
+        "id": "electrical",
         "label": "Electrical",
         "impacted_services": [
             {
-                "id": "S3",
+                "id": "electrical.lighting",
                 "label": "Lighting",
                 "request_types": [
-                    {"id": "R5", "label": "Not working"},
-                    {"id": "R6", "label": "Cannot switch"},
+                    {"id": "electrical.lighting.not_working", "label": "Light not working"},
+                    {
+                        "id": "electrical.lighting.cannot_on_off_dim",
+                        "label": "Cannot turn on/off or dim",
+                    },
+                    {"id": "electrical.lighting.sensor_fault", "label": "Sensor fault"},
+                    {
+                        "id": "electrical.lighting.replace_fitting",
+                        "label": "Replace fitting / globe",
+                    },
+                    {
+                        "id": "electrical.lighting.flickering_intermittent",
+                        "label": "Flickering / intermittent",
+                    },
                 ],
-            }
+            },
+            {
+                "id": "electrical.power",
+                "label": "Power / Outlets",
+                "request_types": [
+                    {"id": "electrical.power.outlet_not_working", "label": "Outlet not working"},
+                    {"id": "electrical.power.power_outage", "label": "Power outage"},
+                    {
+                        "id": "electrical.power.tripping_breaker",
+                        "label": "Breaker tripping / overload",
+                    },
+                    {"id": "electrical.power.other", "label": "Other power issue"},
+                ],
+            },
+            {
+                "id": "electrical.automatic_doors",
+                "label": "Automatic / Roller Doors (Electrical)",
+                "request_types": [
+                    {
+                        "id": "electrical.automatic_doors.roller_jammed",
+                        "label": "Roller door jammed / not opening",
+                    },
+                    {
+                        "id": "electrical.automatic_doors.sensor_fault",
+                        "label": "Door sensor fault",
+                    },
+                    {
+                        "id": "electrical.automatic_doors.control_fault",
+                        "label": "Control / motor fault",
+                    },
+                ],
+            },
         ],
     },
     {
-        "id": "A3",
-        "label": "Building Access",
+        "id": "plumbing",
+        "label": "Plumbing",
         "impacted_services": [
             {
-                "id": "S4",
-                "label": "Doors",
+                "id": "plumbing.toilets",
+                "label": "Toilets",
                 "request_types": [
-                    {"id": "R7", "label": "Roller door"},
-                    {"id": "R8", "label": "Access card"},
+                    {"id": "plumbing.toilets.blocked", "label": "Blocked"},
+                    {"id": "plumbing.toilets.leak", "label": "Leak"},
+                    {"id": "plumbing.toilets.flush_fault", "label": "Flush fault"},
+                    {"id": "plumbing.toilets.running_water", "label": "Running water"},
+                    {"id": "plumbing.toilets.other", "label": "Other toilet issue"},
+                ],
+            },
+            {
+                "id": "plumbing.sinks_taps",
+                "label": "Sinks / Taps",
+                "request_types": [
+                    {"id": "plumbing.sinks_taps.leak", "label": "Leak"},
+                    {"id": "plumbing.sinks_taps.drain_blocked", "label": "Drain blocked"},
+                    {
+                        "id": "plumbing.sinks_taps.no_water",
+                        "label": "No water / low pressure",
+                    },
+                    {"id": "plumbing.sinks_taps.other", "label": "Other sink/tap issue"},
+                ],
+            },
+            {
+                "id": "plumbing.general_water",
+                "label": "General Water",
+                "request_types": [
+                    {
+                        "id": "plumbing.general_water.burst_pipe",
+                        "label": "Burst pipe / major leak",
+                    },
+                    {
+                        "id": "plumbing.general_water.water_smell",
+                        "label": "Water smell / quality concern",
+                    },
+                    {"id": "plumbing.general_water.other", "label": "Other water issue"},
+                ],
+            },
+        ],
+    },
+    {
+        "id": "hvac",
+        "label": "Heating & Cooling (HVAC)",
+        "impacted_services": [
+            {
+                "id": "hvac.air_conditioning",
+                "label": "Air Conditioning",
+                "request_types": [
+                    {"id": "hvac.air_conditioning.not_working", "label": "Not working"},
+                    {"id": "hvac.air_conditioning.too_hot", "label": "Too hot"},
+                    {"id": "hvac.air_conditioning.too_cold", "label": "Too cold"},
+                    {
+                        "id": "hvac.air_conditioning.noisy",
+                        "label": "Noisy / unusual sound",
+                    },
+                    {"id": "hvac.air_conditioning.other", "label": "Other AC issue"},
+                ],
+            },
+            {
+                "id": "hvac.ventilation",
+                "label": "Ventilation / Air Quality",
+                "request_types": [
+                    {"id": "hvac.ventilation.stuffy", "label": "Stuffy / poor ventilation"},
+                    {"id": "hvac.ventilation.odor", "label": "Odor"},
+                    {"id": "hvac.ventilation.other", "label": "Other ventilation issue"},
+                ],
+            },
+        ],
+    },
+    {
+        "id": "access_security",
+        "label": "Access & Security",
+        "impacted_services": [
+            {
+                "id": "access_security.access_cards",
+                "label": "Access Cards / Permissions",
+                "request_types": [
+                    {
+                        "id": "access_security.access_cards.no_access",
+                        "label": "Card not granting access",
+                    },
+                    {
+                        "id": "access_security.access_cards.new_user_setup",
+                        "label": "New user setup / permissions",
+                    },
+                    {
+                        "id": "access_security.access_cards.card_fault",
+                        "label": "Card fault / replacement",
+                    },
+                    {"id": "access_security.access_cards.other", "label": "Other access card issue"},
+                ],
+            },
+            {
+                "id": "access_security.keys_locks",
+                "label": "Keys / Locks",
+                "request_types": [
+                    {"id": "access_security.keys_locks.need_key", "label": "Need key / duplicate key"},
+                    {
+                        "id": "access_security.keys_locks.lock_loose",
+                        "label": "Lock loose / screws tighten",
+                    },
+                    {
+                        "id": "access_security.keys_locks.lock_not_working",
+                        "label": "Lock not working",
+                    },
+                    {"id": "access_security.keys_locks.other", "label": "Other key/lock issue"},
+                ],
+            },
+            {
+                "id": "access_security.doors",
+                "label": "Doors (Access)",
+                "request_types": [
+                    {
+                        "id": "access_security.doors.jammed",
+                        "label": "Door jammed / cannot open/close",
+                    },
+                    {
+                        "id": "access_security.doors.lockout_lockin",
+                        "label": "People locked in/out",
+                    },
+                    {"id": "access_security.doors.other", "label": "Other door access issue"},
+                ],
+            },
+        ],
+    },
+    {
+        "id": "carpentry_interiors",
+        "label": "Carpentry & Interiors (Fixtures/Furniture)",
+        "impacted_services": [
+            {
+                "id": "carpentry_interiors.furniture_storage",
+                "label": "Furniture / Storage",
+                "request_types": [
+                    {"id": "carpentry_interiors.furniture_storage.move", "label": "Move / relocate"},
+                    {
+                        "id": "carpentry_interiors.furniture_storage.remove",
+                        "label": "Remove / dispose",
+                    },
+                    {
+                        "id": "carpentry_interiors.furniture_storage.install",
+                        "label": "Install / assemble",
+                    },
+                    {
+                        "id": "carpentry_interiors.furniture_storage.other",
+                        "label": "Other furniture/storage task",
+                    },
+                ],
+            },
+            {
+                "id": "carpentry_interiors.wall_fixtures",
+                "label": "Wall Fixtures / Mounting",
+                "request_types": [
+                    {
+                        "id": "carpentry_interiors.wall_fixtures.picture_hanging",
+                        "label": "Picture hanging / straighten",
+                    },
+                    {
+                        "id": "carpentry_interiors.wall_fixtures.install_hooks",
+                        "label": "Install hooks / anchors",
+                    },
+                    {
+                        "id": "carpentry_interiors.wall_fixtures.repair_mounting",
+                        "label": "Repair mounting / reattach",
+                    },
+                    {
+                        "id": "carpentry_interiors.wall_fixtures.other",
+                        "label": "Other wall fixture task",
+                    },
+                ],
+            },
+            {
+                "id": "carpentry_interiors.bathroom_accessories",
+                "label": "Bathroom Accessories",
+                "request_types": [
+                    {
+                        "id": "carpentry_interiors.bathroom_accessories.dispenser_loose",
+                        "label": "Dispenser loose / reattach",
+                    },
+                    {
+                        "id": "carpentry_interiors.bathroom_accessories.other",
+                        "label": "Other bathroom accessory issue",
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        "id": "cleaning_waste",
+        "label": "Cleaning & Waste",
+        "impacted_services": [
+            {
+                "id": "cleaning_waste.cleaning",
+                "label": "Cleaning",
+                "request_types": [
+                    {"id": "cleaning_waste.cleaning.spill", "label": "Spill / cleanup needed"},
+                    {"id": "cleaning_waste.cleaning.hygiene", "label": "Hygiene issue"},
+                    {"id": "cleaning_waste.cleaning.other", "label": "Other cleaning request"},
+                ],
+            },
+            {
+                "id": "cleaning_waste.waste",
+                "label": "Waste / Disposal",
+                "request_types": [
+                    {
+                        "id": "cleaning_waste.waste.remove_items",
+                        "label": "Remove items to waste",
+                    },
+                    {
+                        "id": "cleaning_waste.waste.other",
+                        "label": "Other waste/disposal request",
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        "id": "safety_emergency",
+        "label": "Safety / Emergency",
+        "impacted_services": [
+            {
+                "id": "safety_emergency.immediate_hazard",
+                "label": "Immediate Hazard",
+                "request_types": [
+                    {
+                        "id": "safety_emergency.immediate_hazard.people_trapped",
+                        "label": "People trapped / lock-in",
+                    },
+                    {
+                        "id": "safety_emergency.immediate_hazard.unsafe_area",
+                        "label": "Unsafe area / hazard",
+                    },
+                    {
+                        "id": "safety_emergency.immediate_hazard.other",
+                        "label": "Other emergency",
+                    },
                 ],
             }
         ],
