@@ -29,6 +29,19 @@ interface RequestItem {
   clarifying_questions?: string[]
 }
 
+const statusBadgeClass = (status: string) => {
+  switch (status) {
+    case 'submitted':
+      return 'is-success'
+    case 'ready':
+      return 'is-primary'
+    case 'needs_clarification':
+      return 'is-warning'
+    default:
+      return 'is-dark'
+  }
+}
+
 export default function AdminView() {
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [requests, setRequests] = useState<RequestItem[]>([])
@@ -53,39 +66,43 @@ export default function AdminView() {
   }
 
   return (
-    <div>
+    <div className="nes-container">
       <h2>Admin Statistics</h2>
-      <p className="tag">Separated admin view</p>
+      <p className="muted">Separated admin view</p>
       <div className="stat-grid">
-        <div className="stat-card">
+        <div className="stat-card nes-container">
           <h3>Total requests</h3>
           <p>{stats?.total_requests ?? 0}</p>
         </div>
         {stats &&
           Object.entries(stats.by_status).map(([status, count]) => (
-            <div className="stat-card" key={status}>
+            <div className="stat-card nes-container" key={status}>
               <h3>{status}</h3>
               <p>{count}</p>
             </div>
           ))}
       </div>
 
-      <h3 style={{ marginTop: '24px' }}>Extracted requests</h3>
+      <h2 style={{ marginTop: '24px' }}>Extracted requests</h2>
       <div className="request-list">
         {requests.length === 0 ? (
           <p className="muted">No requests yet.</p>
         ) : (
           requests.map((request) => (
-            <div key={request.request_id} className="request-card">
+            <div key={request.request_id} className="request-card nes-container">
               <div className="request-header">
                 <strong>{request.title}</strong>
-                <span className="tag">{request.status}</span>
+                <span className={`nes-badge ${statusBadgeClass(request.status)}`}>
+                  {request.status}
+                </span>
               </div>
               <p className="muted">{request.description}</p>
               <div className="request-meta">
-                <span>Urgency: {request.urgency}</span>
                 <span>
-                  Location:{' '}
+                  <strong>Urgency:</strong> {request.urgency}
+                </span>
+                <span>
+                  <strong>Location:</strong>{' '}
                   {request.location?.room ||
                     request.location?.floor ||
                     request.location?.building ||
@@ -94,27 +111,40 @@ export default function AdminView() {
                 </span>
               </div>
               <div className="request-meta">
-                <span>Email: {request.reporter_email || 'Unknown'}</span>
+                <span>
+                  <strong>Email:</strong> {request.reporter_email || 'Unknown'}
+                </span>
               </div>
               <div className="request-meta">
-                <span>Facilities: {request.taxonomy?.facilities_area || 'Unknown'}</span>
-                <span>Service: {request.taxonomy?.impacted_service || 'Unknown'}</span>
-                <span>Type: {request.taxonomy?.request_type || 'Unknown'}</span>
+                <span>
+                  <strong>Facilities:</strong>{' '}
+                  {request.taxonomy?.facilities_area || 'Unknown'}
+                </span>
+                <span>
+                  <strong>Service:</strong> {request.taxonomy?.impacted_service || 'Unknown'}
+                </span>
+                <span>
+                  <strong>Type:</strong> {request.taxonomy?.request_type || 'Unknown'}
+                </span>
               </div>
               {request.missing_required_fields?.length ? (
                 <div className="request-meta">
-                  <span>Missing: {request.missing_required_fields.join(', ')}</span>
+                  <span>
+                    <strong>Missing:</strong> {request.missing_required_fields.join(', ')}
+                  </span>
                 </div>
               ) : null}
               {request.clarifying_questions?.length ? (
                 <div className="request-meta">
-                  <span>Next question: {request.clarifying_questions[0]}</span>
+                  <span>
+                    <strong>Next question:</strong> {request.clarifying_questions[0]}
+                  </span>
                 </div>
               ) : null}
               <div className="request-meta">
                 <button
                   type="button"
-                  className="link-button"
+                  className="link-button nes-btn is-primary"
                   onClick={() => handleOpenConversation(request)}
                 >
                   View conversation
@@ -128,12 +158,16 @@ export default function AdminView() {
       {activeConversation ? (
         <div className="modal-overlay" onClick={() => setActiveConversation(null)}>
           <div
-            className="modal"
+            className="modal nes-container"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
               <h4>Conversation: {activeConversation.title}</h4>
-              <button type="button" onClick={() => setActiveConversation(null)}>
+              <button
+                type="button"
+                onClick={() => setActiveConversation(null)}
+                className="nes-btn is-warning"
+              >
                 Close
               </button>
             </div>

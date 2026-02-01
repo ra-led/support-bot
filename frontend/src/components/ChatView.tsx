@@ -25,6 +25,19 @@ interface ConversationMessage {
   content: string
 }
 
+const statusClass = (status: string) => {
+  switch (status) {
+    case 'submitted':
+      return 'is-success'
+    case 'ready':
+      return 'is-primary'
+    case 'needs_clarification':
+      return 'is-warning'
+    default:
+      return 'is-dark'
+  }
+}
+
 export default function ChatView() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -42,6 +55,7 @@ export default function ChatView() {
   const [isSending, setIsSending] = useState(false)
   const [correctionRequestId, setCorrectionRequestId] = useState<string | null>(null)
   const feedRef = useRef<HTMLDivElement | null>(null)
+  const [typingDots, setTypingDots] = useState('')
 
   useEffect(() => {
     const storedEmail = localStorage.getItem('supportBotEmail')
@@ -52,6 +66,20 @@ export default function ChatView() {
       loadRequests(storedEmail)
     }
   }, [])
+
+  useEffect(() => {
+    if (!isSending) {
+      setTypingDots('')
+      return
+    }
+    const frames = ['', '.', '..', '...']
+    let index = 0
+    const interval = window.setInterval(() => {
+      index = (index + 1) % frames.length
+      setTypingDots(frames[index])
+    }, 400)
+    return () => window.clearInterval(interval)
+  }, [isSending])
 
   const appendMessage = (content: ReactNode, id: number) => {
     setMessages((prev) => [...prev, { id, content }])
@@ -202,14 +230,14 @@ export default function ChatView() {
         <button
           type="button"
           onClick={() => handleSubmit(requestId)}
-          className="primary"
+          className="nes-btn is-success"
         >
           Submit
         </button>
         <button
           type="button"
           onClick={() => handleCorrection(requestId)}
-          className="secondary"
+          className="nes-btn is-warning"
         >
           Need correction
         </button>
@@ -276,10 +304,10 @@ export default function ChatView() {
 
   if (!emailReady) {
     return (
-      <div className="chat-card contact-screen">
+      <div className="chat-card contact-screen nes-container">
         <h2>Requester Chat</h2>
         <p className="muted">Enter your contact email to start</p>
-        <div className="contact-form">
+        <div className="contact-form nes-field">
           <label htmlFor="contact-email">Contact email</label>
           <input
             id="contact-email"
@@ -287,16 +315,18 @@ export default function ChatView() {
             placeholder="you@clinic.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            className="nes-input"
           />
           <label className="checkbox-row">
             <input
               type="checkbox"
+              className="nes-checkbox"
               checked={rememberSession}
               onChange={(event) => setRememberSession(event.target.checked)}
             />
             <span>Use cookies to remember me</span>
           </label>
-          <button type="button" onClick={handleEmailSubmit}>
+          <button type="button" onClick={handleEmailSubmit} className="nes-btn is-primary">
             Start conversation
           </button>
         </div>
@@ -306,13 +336,13 @@ export default function ChatView() {
 
   return (
     <div className="chat-layout">
-      <aside className="chat-sidebar">
+      <aside className="chat-sidebar nes-container">
         <div className="sidebar-header">
           <div>
             <strong>Conversations</strong>
             <p className="muted">{email}</p>
           </div>
-          <button type="button" onClick={handleNewRequest}>
+          <button type="button" onClick={handleNewRequest} className="nes-btn is-warning">
             New request
           </button>
         </div>
@@ -324,40 +354,44 @@ export default function ChatView() {
               <button
                 key={request.request_id}
                 type="button"
-                className={`conversation-item ${
+                className={`nes-container conversation-item ${
                   selectedRequestId === request.request_id ? 'active' : ''
                 }`}
                 onClick={() => handleSelectRequest(request.request_id)}
               >
                 <span>{request.title}</span>
-                <span className="tag">{request.status}</span>
+                <span className={`nes-badge ${statusClass(request.status)}`}>{request.status}</span>
               </button>
             ))
           )}
         </div>
       </aside>
-      <div className="chat-card">
+      <div className="chat-card nes-container">
         <h2>Requester Chat</h2>
         <div className="chat-feed" ref={feedRef}>
-          {messages.map((message, index) => (
-            <div
-              key={`${message.id}-${index}`}
-              className={`chat-bubble ${message.id === 0 ? 'from-user' : 'from-bot'}`}
-            >
-              <span className="chat-sender">{message.id === 0 ? 'You' : 'Bot'}</span>
-              <div className="chat-content">{message.content}</div>
-            </div>
-          ))}
-          {isSending ? (
-            <div className="chat-bubble from-bot typing">
-              <span className="chat-sender">Bot</span>
-              <div className="typing-dots">
-                <span />
-                <span />
-                <span />
-              </div>
-            </div>
-          ) : null}
+          <section className="message-list">
+            {messages.map((message, index) => (
+              <section
+                key={`${message.id}-${index}`}
+                className={`message ${message.id === 0 ? '-right' : '-left'}`}
+              >
+                <div
+                  className={`nes-balloon ${
+                    message.id === 0 ? 'from-right' : 'from-left is-dark'
+                  }`}
+                >
+                  <p>{message.content}</p>
+                </div>
+              </section>
+            ))}
+            {isSending ? (
+              <section className="message -left">
+                <div className="nes-balloon from-left is-dark">
+                  <p>{typingDots || '.'}</p>
+                </div>
+              </section>
+            ) : null}
+          </section>
         </div>
         <div className="chat-input">
           <textarea
@@ -372,11 +406,13 @@ export default function ChatView() {
             }
             value={input}
             onChange={(event) => setInput(event.target.value)}
+            className="nes-textarea"
           />
           <button
             type="button"
             onClick={pendingRequest ? handleClarify : handleSend}
             disabled={isSending}
+            className="nes-btn is-primary"
           >
             {pendingRequest ? 'Send answer' : 'Send'}
           </button>
