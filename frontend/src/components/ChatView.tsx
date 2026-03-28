@@ -10,6 +10,7 @@ import {
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
 
 type ChatMessage = {
+  id: string
   role: 'user' | 'bot'
   content: ReactNode
 }
@@ -31,7 +32,7 @@ const urgencyLabel = (urgency?: string) => (urgency && urgency !== 'unknown' ? u
 
 export default function ChatView() {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'bot', content: 'Describe a facility issue and I will draft the request.' }
+    { id: 'm-1', role: 'bot', content: 'Describe a facility issue and I will draft the request.' }
   ])
   const [input, setInput] = useState('')
   const [email, setEmail] = useState('')
@@ -44,10 +45,15 @@ export default function ChatView() {
   const [correctionRequestId, setCorrectionRequestId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isTranscribing, setIsTranscribing] = useState(false)
+  const [actionMessageId, setActionMessageId] = useState<string | null>(null)
+  const messageCounterRef = useRef(2)
   const feedRef = useRef<HTMLDivElement | null>(null)
 
   const appendMessage = useCallback((role: ChatMessage['role'], content: ReactNode) => {
-    setMessages((prev) => [...prev, { role, content }])
+    const id = `m-${messageCounterRef.current}`
+    messageCounterRef.current += 1
+    setMessages((prev) => [...prev, { id, role, content }])
+    return id
   }, [])
 
   const {
@@ -86,14 +92,23 @@ export default function ChatView() {
   const loadConversation = async (requestId: string) => {
     const data = await fetchRequestMessages(requestId)
     const loaded = (data.messages as ConversationMessage[]).map((message) => ({
+      id: `m-${messageCounterRef.current++}`,
       role: message.sender,
       content: message.content
     }))
-    setMessages(loaded.length ? loaded : [{ role: 'bot', content: 'No messages recorded yet.' }])
+    setMessages(
+      loaded.length
+        ? loaded
+        : [{ id: `m-${messageCounterRef.current++}`, role: 'bot', content: 'No messages recorded yet.' }]
+    )
+    setActionMessageId(null)
   }
 
   const appendActionButtons = (requestId: string) => {
-    appendMessage(
+    if (actionMessageId) {
+      setMessages((prev) => prev.filter((message) => message.id !== actionMessageId))
+    }
+    const id = appendMessage(
       'bot',
       <div className="chat-actions">
         <button type="button" onClick={() => void handleSubmit(requestId)} className="btn success">
@@ -104,6 +119,7 @@ export default function ChatView() {
         </button>
       </div>
     )
+    setActionMessageId(id)
   }
 
   const handleSend = async () => {
@@ -210,6 +226,10 @@ export default function ChatView() {
 
   const handleSubmit = async (requestId: string) => {
     if (isSending) return
+    if (actionMessageId) {
+      setMessages((prev) => prev.filter((message) => message.id !== actionMessageId))
+      setActionMessageId(null)
+    }
     setIsSending(true)
     setErrorMessage(null)
     try {
@@ -226,6 +246,10 @@ export default function ChatView() {
   }
 
   const handleCorrection = (requestId: string) => {
+    if (actionMessageId) {
+      setMessages((prev) => prev.filter((message) => message.id !== actionMessageId))
+      setActionMessageId(null)
+    }
     setCorrectionRequestId(requestId)
     appendMessage('bot', 'Tell me what to correct and I will update the draft.')
   }
@@ -254,7 +278,8 @@ export default function ChatView() {
     setSelectedRequestId(null)
     setPendingRequest(null)
     setCorrectionRequestId(null)
-    setMessages([{ role: 'bot', content: 'Describe the next facility issue.' }])
+    setMessages([{ id: `m-${messageCounterRef.current++}`, role: 'bot', content: 'Describe the next facility issue.' }])
+    setActionMessageId(null)
     setInput('')
   }
 
@@ -359,7 +384,7 @@ export default function ChatView() {
         <div className="chat-feed" ref={feedRef}>
           {messages.map((message, index) => (
             <div
-              key={`${message.role}-${index}`}
+              key={message.id || `${message.role}-${index}`}
               className={`chat-bubble ${message.role === 'user' ? 'from-user' : 'from-bot'}`}
             >
               <span className="chat-role">{message.role === 'user' ? 'You' : 'Assistant'}</span>

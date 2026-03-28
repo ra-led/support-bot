@@ -21,9 +21,10 @@ a {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .navbar {
@@ -77,6 +78,14 @@ a {
   width: 100%;
   margin: 0 auto;
   padding: 14px 16px 16px;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+.main-content > * {
+  flex: 1;
+  min-height: 0;
 }
 
 .panel {
@@ -87,17 +96,20 @@ a {
 }
 
 .chat-layout {
-  min-height: calc(100vh - 96px);
+  height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 14px;
 }
 
 .chat-sidebar {
+  height: 100%;
   padding: 12px;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar-header {
@@ -168,10 +180,12 @@ a {
 }
 
 .chat-card {
+  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 16px 16px 14px;
+  overflow: hidden;
 }
 
 .chat-head {
@@ -194,8 +208,9 @@ a {
 
 .chat-feed {
   flex: 1;
-  min-height: 260px;
-  overflow: auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -593,16 +608,26 @@ a {
 }
 
 @media (max-width: 980px) {
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
   .main-content {
     padding: 10px;
+    overflow: auto;
+    display: block;
   }
 
   .chat-layout {
     grid-template-columns: 1fr;
-    min-height: auto;
+    height: auto;
+    min-height: calc(100dvh - 96px);
   }
 
   .chat-sidebar {
+    height: auto;
     max-height: 240px;
   }
 
