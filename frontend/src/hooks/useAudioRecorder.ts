@@ -20,7 +20,10 @@ export function useAudioRecorder() {
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
 
-  const isSupported = typeof window !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+  const isSupported =
+    typeof window !== 'undefined' &&
+    typeof MediaRecorder !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia
   const isRecording = state === 'recording'
   const hasRecording = !!audioBlob
   const mimeType = useMemo(getSupportedMimeType, [])
