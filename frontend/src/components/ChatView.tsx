@@ -1,14 +1,16 @@
-import { ReactNode, useEffect, useRef, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import {
   clarifyRequest,
   fetchRequestMessages,
   fetchRequestsForEmail,
   sendMessage,
-  submitRequest
+  submitRequest,
+  transcribeAudio
 } from '../api'
+import { useAudioRecorder } from '../hooks/useAudioRecorder'
 
 type ChatMessage = {
-  id: number
+  role: 'user' | 'bot'
   content: ReactNode
 }
 
@@ -25,25 +27,9 @@ interface ConversationMessage {
   content: string
 }
 
-const statusClass = (status: string) => {
-  switch (status) {
-    case 'submitted':
-      return 'is-success'
-    case 'ready':
-      return 'is-primary'
-    case 'needs_clarification':
-      return 'is-warning'
-    default:
-      return 'is-dark'
-  }
-}
-
 export default function ChatView() {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 1,
-      content: 'Hi! Describe the facility issue and I will draft the request.'
-    }
+    { role: 'bot', content: 'Describe a facility issue and I will draft the request.' }
   ])
   const [input, setInput] = useState('')
   const [email, setEmail] = useState('')
@@ -54,8 +40,25 @@ export default function ChatView() {
   const [pendingRequest, setPendingRequest] = useState<RequestSummary | null>(null)
   const [isSending, setIsSending] = useState(false)
   const [correctionRequestId, setCorrectionRequestId] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isTranscribing, setIsTranscribing] = useState(false)
   const feedRef = useRef<HTMLDivElement | null>(null)
-  const [typingDots, setTypingDots] = useState('')
+
+  const appendMessage = useCallback((role: ChatMessage['role'], content: ReactNode) => {
+    setMessages((prev) => [...prev, { role, content }])
+  }, [])
+
+  const {
+    isSupported,
+    isRecording,
+    hasRecording,
+    audioBlob,
+    error,
+    clearError,
+    start,
+    stop,
+    clear
+  } = useAudioRecorder()
 
   useEffect(() => {
     const storedEmail = localStorage.getItem('supportBotEmail')
@@ -63,27 +66,9 @@ export default function ChatView() {
       setEmail(storedEmail)
       setEmailReady(true)
       setRememberSession(true)
-      loadRequests(storedEmail)
+      void loadRequests(storedEmail)
     }
   }, [])
-
-  useEffect(() => {
-    if (!isSending) {
-      setTypingDots('')
-      return
-    }
-    const frames = ['', '.', '..', '...']
-    let index = 0
-    const interval = window.setInterval(() => {
-      index = (index + 1) % frames.length
-      setTypingDots(frames[index])
-    }, 400)
-    return () => window.clearInterval(interval)
-  }, [isSending])
-
-  const appendMessage = (content: ReactNode, id: number) => {
-    setMessages((prev) => [...prev, { id, content }])
-  }
 
   useEffect(() => {
     if (feedRef.current) {
@@ -99,39 +84,40 @@ export default function ChatView() {
   const loadConversation = async (requestId: string) => {
     const data = await fetchRequestMessages(requestId)
     const loaded = (data.messages as ConversationMessage[]).map((message) => ({
-      id: message.sender === 'user' ? 0 : 1,
+      role: message.sender,
       content: message.content
     }))
-    setMessages(
-      loaded.length
-        ? loaded
-        : [
-            {
-              id: 1,
-              content: 'No messages recorded yet.'
-            }
-          ]
+    setMessages(loaded.length ? loaded : [{ role: 'bot', content: 'No messages recorded yet.' }])
+  }
+
+  const appendActionButtons = (requestId: string) => {
+    appendMessage(
+      'bot',
+      <div className="chat-actions">
+        <button type="button" onClick={() => void handleSubmit(requestId)} className="btn success">
+          Submit
+        </button>
+        <button type="button" onClick={() => handleCorrection(requestId)} className="btn subtle">
+          Need correction
+        </button>
+      </div>
     )
   }
 
   const handleSend = async () => {
     if (!input.trim() || isSending) return
+    setErrorMessage(null)
     const text = input.trim()
     setInput('')
-    appendMessage(text, 0)
+    appendMessage('user', text)
     setIsSending(true)
 
     try {
       if (correctionRequestId) {
         const updated = await clarifyRequest(correctionRequestId, text)
-        appendMessage(
-          <>
-            Updated request: <strong>{updated.title}</strong> ({updated.status}).
-          </>,
-          1
-        )
+        appendMessage('bot', `Updated request: ${updated.title} (${updated.status}).`)
         if (updated.clarifying_questions?.length) {
-          appendMessage(updated.clarifying_questions[0], 1)
+          appendMessage('bot', updated.clarifying_questions[0])
           setPendingRequest({
             request_id: updated.request_id,
             title: updated.title,
@@ -140,7 +126,7 @@ export default function ChatView() {
             clarifying_questions: updated.clarifying_questions
           })
         } else {
-          appendMessage('Thanks! I updated the request.', 1)
+          appendMessage('bot', 'Thanks, update applied.')
           appendActionButtons(updated.request_id)
         }
         setCorrectionRequestId(null)
@@ -149,42 +135,40 @@ export default function ChatView() {
 
       const data = await sendMessage(text, email)
       const request = data.requests?.[0]
-      if (request) {
-        appendMessage(
-          <>
-            <strong>Drafted:</strong> {request.title} · <strong>urgency</strong>{' '}
-            {request.urgency || 'unknown'}.
-          </>,
-          1
-        )
-        if (request.clarifying_questions?.length) {
-          appendMessage(request.clarifying_questions[0], 1)
-          setPendingRequest({
-            request_id: request.request_id,
-            title: request.title,
-            urgency: request.urgency,
-            status: request.status,
-            clarifying_questions: request.clarifying_questions
-          })
-        } else {
-          appendMessage('All required slots are filled.', 1)
-          appendActionButtons(request.request_id)
-          setPendingRequest(null)
-        }
-        setRequestList((prev) => [
-          {
-            request_id: request.request_id,
-            title: request.title,
-            urgency: request.urgency,
-            status: request.status,
-            clarifying_questions: request.clarifying_questions
-          },
-          ...prev
-        ])
-        setSelectedRequestId(request.request_id)
-      } else {
-        appendMessage('I could not detect an issue. Try rephrasing?', 1)
+      if (!request) {
+        appendMessage('bot', 'I could not detect an issue. Please rephrase and try again.')
+        return
       }
+
+      appendMessage('bot', `Drafted: ${request.title} (urgency: ${request.urgency || 'unknown'}).`)
+      if (request.clarifying_questions?.length) {
+        appendMessage('bot', request.clarifying_questions[0])
+        setPendingRequest({
+          request_id: request.request_id,
+          title: request.title,
+          urgency: request.urgency,
+          status: request.status,
+          clarifying_questions: request.clarifying_questions
+        })
+      } else {
+        appendMessage('bot', 'All required slots are filled.')
+        appendActionButtons(request.request_id)
+        setPendingRequest(null)
+      }
+
+      setRequestList((prev) => [
+        {
+          request_id: request.request_id,
+          title: request.title,
+          urgency: request.urgency,
+          status: request.status,
+          clarifying_questions: request.clarifying_questions
+        },
+        ...prev
+      ])
+      setSelectedRequestId(request.request_id)
+    } catch {
+      setErrorMessage('Failed to send message. Please try again.')
     } finally {
       setIsSending(false)
     }
@@ -192,21 +176,17 @@ export default function ChatView() {
 
   const handleClarify = async () => {
     if (!pendingRequest || !input.trim() || isSending) return
+    setErrorMessage(null)
     const text = input.trim()
     setInput('')
-    appendMessage(text, 0)
+    appendMessage('user', text)
     setIsSending(true)
 
     try {
       const updated = await clarifyRequest(pendingRequest.request_id, text)
-      appendMessage(
-        <>
-          Updated request: <strong>{updated.title}</strong> ({updated.status}).
-        </>,
-        1
-      )
+      appendMessage('bot', `Updated request: ${updated.title} (${updated.status}).`)
       if (updated.clarifying_questions?.length) {
-        appendMessage(updated.clarifying_questions[0], 1)
+        appendMessage('bot', updated.clarifying_questions[0])
         setPendingRequest({
           request_id: updated.request_id,
           title: updated.title,
@@ -215,48 +195,29 @@ export default function ChatView() {
           clarifying_questions: updated.clarifying_questions
         })
       } else {
-        appendMessage('All required slots are filled.', 1)
+        appendMessage('bot', 'All required slots are filled.')
         appendActionButtons(updated.request_id)
         setPendingRequest(null)
       }
+    } catch {
+      setErrorMessage('Failed to update request. Please try again.')
     } finally {
       setIsSending(false)
     }
   }
 
-  const appendActionButtons = (requestId: string) => {
-    appendMessage(
-      <div className="chat-actions">
-        <button
-          type="button"
-          onClick={() => handleSubmit(requestId)}
-          className="nes-btn is-success"
-        >
-          Submit
-        </button>
-        <button
-          type="button"
-          onClick={() => handleCorrection(requestId)}
-          className="nes-btn is-warning"
-        >
-          Need correction
-        </button>
-      </div>,
-      1
-    )
-  }
-
   const handleSubmit = async (requestId: string) => {
     if (isSending) return
     setIsSending(true)
+    setErrorMessage(null)
     try {
       await submitRequest(requestId)
-      appendMessage('Submitted ✅ Your request is on the way.', 1)
+      appendMessage('bot', 'Submitted. Your request is now in queue.')
       setRequestList((prev) =>
-        prev.map((item) =>
-          item.request_id === requestId ? { ...item, status: 'submitted' } : item
-        )
+        prev.map((item) => (item.request_id === requestId ? { ...item, status: 'submitted' } : item))
       )
+    } catch {
+      setErrorMessage('Failed to submit request. Please try again.')
     } finally {
       setIsSending(false)
     }
@@ -264,10 +225,7 @@ export default function ChatView() {
 
   const handleCorrection = (requestId: string) => {
     setCorrectionRequestId(requestId)
-    appendMessage(
-      'Happy to tweak it — what should I correct or add?',
-      1
-    )
+    appendMessage('bot', 'Tell me what to correct and I will update the draft.')
   }
 
   const handleEmailSubmit = async () => {
@@ -294,39 +252,58 @@ export default function ChatView() {
     setSelectedRequestId(null)
     setPendingRequest(null)
     setCorrectionRequestId(null)
-    setMessages([
-      {
-        id: 1,
-        content: 'Describe the next facility issue and I will draft the request.'
+    setMessages([{ role: 'bot', content: 'Describe the next facility issue.' }])
+    setInput('')
+  }
+
+  const handleTranscribeRecording = async () => {
+    if (!audioBlob || isTranscribing) return
+    setErrorMessage(null)
+    setIsTranscribing(true)
+    try {
+      const response = await transcribeAudio(
+        audioBlob,
+        'Facility and repair request from clinic branch staff.'
+      )
+      if (response.text?.trim()) {
+        setInput((prev) => (prev ? `${prev} ${response.text.trim()}` : response.text.trim()))
+      } else {
+        setErrorMessage('Transcription returned empty text.')
       }
-    ])
+      clear()
+    } catch {
+      setErrorMessage('Audio transcription failed. Please try again.')
+    } finally {
+      setIsTranscribing(false)
+    }
   }
 
   if (!emailReady) {
     return (
-      <div className="chat-card contact-screen nes-container">
-        <h2>Requester Chat</h2>
-        <p className="muted">Enter your contact email to start</p>
-        <div className="contact-form nes-field">
-          <label htmlFor="contact-email">Contact email</label>
+      <div className="email-gate">
+        <div className="panel email-panel">
+          <h2>Requester Chat</h2>
+          <p className="muted">Enter your contact email to start.</p>
+          <label className="form-label" htmlFor="contact-email">
+            Contact email
+          </label>
           <input
             id="contact-email"
             type="email"
             placeholder="you@clinic.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="nes-input"
+            className="text-input"
           />
           <label className="checkbox-row">
             <input
               type="checkbox"
-              className="nes-checkbox"
               checked={rememberSession}
               onChange={(event) => setRememberSession(event.target.checked)}
             />
-            <span>Use cookies to remember me</span>
+            <span>Remember this email</span>
           </label>
-          <button type="button" onClick={handleEmailSubmit} className="nes-btn is-primary">
+          <button type="button" onClick={() => void handleEmailSubmit()} className="btn primary">
             Start conversation
           </button>
         </div>
@@ -336,13 +313,13 @@ export default function ChatView() {
 
   return (
     <div className="chat-layout">
-      <aside className="chat-sidebar nes-container">
+      <aside className="panel chat-sidebar">
         <div className="sidebar-header">
           <div>
             <strong>Conversations</strong>
             <p className="muted">{email}</p>
           </div>
-          <button type="button" onClick={handleNewRequest} className="nes-btn is-warning">
+          <button type="button" onClick={handleNewRequest} className="btn subtle">
             New request
           </button>
         </div>
@@ -354,70 +331,101 @@ export default function ChatView() {
               <button
                 key={request.request_id}
                 type="button"
-                className={`nes-container conversation-item ${
-                  selectedRequestId === request.request_id ? 'active' : ''
-                }`}
-                onClick={() => handleSelectRequest(request.request_id)}
+                className={`conversation-item ${selectedRequestId === request.request_id ? 'active' : ''}`}
+                onClick={() => void handleSelectRequest(request.request_id)}
               >
-                <span>{request.title}</span>
-                <span className={`nes-badge ${statusClass(request.status)}`}>{request.status}</span>
+                <span className="conversation-title">{request.title}</span>
+                <span className={`status-pill status-${request.status}`}>{request.status}</span>
               </button>
             ))
           )}
         </div>
       </aside>
-      <div className="chat-card nes-container">
-        <h2>Requester Chat</h2>
-        <div className="chat-feed" ref={feedRef}>
-          <section className="message-list">
-            {messages.map((message, index) => (
-              <section
-                key={`${message.id}-${index}`}
-                className={`message ${message.id === 0 ? '-right' : '-left'}`}
-              >
-                <div
-                  className={`nes-balloon ${
-                    message.id === 0 ? 'from-right' : 'from-left is-dark'
-                  }`}
-                >
-                  <p>{message.content}</p>
-                </div>
-              </section>
-            ))}
-            {isSending ? (
-              <section className="message -left">
-                <div className="nes-balloon from-left is-dark">
-                  <p>{typingDots || '.'}</p>
-                </div>
-              </section>
-            ) : null}
-          </section>
+
+      <section className="panel chat-card">
+        <div className="chat-head">
+          <h2>Facility Chat</h2>
+          {pendingRequest ? <span className="status-pill status-needs_clarification">Awaiting details</span> : null}
         </div>
-        <div className="chat-input">
+
+        <div className="chat-feed" ref={feedRef}>
+          {messages.map((message, index) => (
+            <div
+              key={`${message.role}-${index}`}
+              className={`chat-bubble ${message.role === 'user' ? 'from-user' : 'from-bot'}`}
+            >
+              <div className="chat-content">{message.content}</div>
+            </div>
+          ))}
+          {isSending ? <div className="typing-indicator">Assistant is drafting...</div> : null}
+        </div>
+
+        {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+        {error ? <p className="error-text">{error}</p> : null}
+
+        <div className="composer">
           <textarea
             placeholder={
               correctionRequestId
-                ? 'Tell me what needs to change…'
+                ? 'Tell me what needs to change...'
                 : pendingRequest
-                ? 'Answer the follow-up question…'
+                ? 'Answer the follow-up question...'
                 : selectedRequestId
-                ? 'Add a follow-up to this request…'
-                : 'Describe the issue…'
+                ? 'Add follow-up details...'
+                : 'Describe the issue...'
             }
             value={input}
-            onChange={(event) => setInput(event.target.value)}
-            className="nes-textarea"
+            onChange={(event) => {
+              setInput(event.target.value)
+              if (error) clearError()
+            }}
+            className="composer-input"
           />
-          <button
-            type="button"
-            onClick={pendingRequest ? handleClarify : handleSend}
-            disabled={isSending}
-            className="nes-btn is-primary"
-          >
-            {pendingRequest ? 'Send answer' : 'Send'}
-          </button>
+          <div className="composer-footer">
+            <div className="voice-state">
+              {isRecording ? (
+                <span className="recording-indicator">
+                  <span className="recording-dot" />
+                  Recording...
+                </span>
+              ) : null}
+              {hasRecording ? <span className="muted">Recording ready for Whisper transcription</span> : null}
+              {isTranscribing ? <span className="muted">Transcribing with whisper-1...</span> : null}
+            </div>
+            <div className="composer-actions">
+              {isSupported ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={isRecording ? stop : () => void start()}
+                    className={`btn ${isRecording ? 'danger' : 'subtle'}`}
+                  >
+                    {isRecording ? 'Stop recording' : 'Record voice'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleTranscribeRecording()}
+                    disabled={!hasRecording || isTranscribing}
+                    className="btn subtle"
+                  >
+                    Transcribe
+                  </button>
+                </>
+              ) : (
+                <span className="muted">Voice not supported in this browser</span>
+              )}
+              <button
+                type="button"
+                onClick={() => void (pendingRequest ? handleClarify() : handleSend())}
+                disabled={isSending || isTranscribing}
+                className="btn primary"
+              >
+                {pendingRequest ? 'Send answer' : 'Send'}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
   )
 }

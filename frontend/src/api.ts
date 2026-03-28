@@ -87,3 +87,18 @@ export async function fetchRequestMessages(requestId: string) {
   const response = await api.get(`/v1/requests/${requestId}/messages`)
   return response.data
 }
+
+export async function transcribeAudio(audioBlob: Blob, prompt?: string) {
+  const formData = new FormData()
+  formData.append('file', audioBlob, 'recording.webm')
+  if (prompt) {
+    formData.append('prompt', prompt)
+  }
+
+  const response = await api.post('/v1/audio/transcribe', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+  return response.data as { text: string }
+}

@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -9,6 +9,7 @@ from .storage import storage
 
 REQUIRED_TAXONOMY_FIELDS = ("facilities_area", "impacted_service")
 LOCATION_DETAIL_FIELDS = ("building", "floor", "room", "free_text")
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 
 def _clean_value(value: Any) -> Optional[str]:
@@ -153,6 +154,34 @@ async def intake_text(payload: IntakeRequest) -> Dict[str, Any]:
 
     storage.update_message_extraction(payload.message_id, requests_output)
     return {"requests": requests_output, "message_saved": True}
+
+
+@app.post("/v1/audio/transcribe")
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    prompt: Optional[str] = Form(default=None),
+) -> Dict[str, str]:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Audio filename is required")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Audio file is empty")
+    if len(content) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=400, detail="Audio file exceeds 25MB limit")
+
+    try:
+        text = llm_client.transcribe_audio(
+            audio_file=content,
+            filename=file.filename,
+            prompt=prompt,
+        )
+    except RuntimeError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Transcription failed: {error}") from error
+
+    return {"text": text}
 
 
 @app.post("/v1/requests/{request_id}/clarify")

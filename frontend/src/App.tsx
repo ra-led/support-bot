@@ -5,15 +5,18 @@ import AdminView from './components/AdminView'
 export default function App() {
   return (
     <div className="app-shell">
-      <header className="navbar nes-container">
+      <header className="navbar">
         <div className="header-title">
-          <strong>Facility Intake Bot</strong>
+          <strong>Facility Intake Assistant</strong>
         </div>
         <nav className="nav-links">
-          <NavLink to="/" className="nes-btn is-primary">
+          <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             Chat
           </NavLink>
-          <NavLink to="/admin" className="nes-btn is-primary">
+          <NavLink
+            to="/admin"
+            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+          >
             Admin
           </NavLink>
         </nav>
