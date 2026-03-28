@@ -88,6 +88,13 @@ export async function fetchRequestMessages(requestId: string) {
   return response.data
 }
 
+export async function downloadIssuesExport() {
+  const response = await api.get('/v1/admin/export/issues.xlsx', {
+    responseType: 'blob'
+  })
+  return response.data as Blob
+}
+
 export async function transcribeAudio(audioBlob: Blob, prompt?: string) {
   const formData = new FormData()
   formData.append('file', audioBlob, 'recording.webm')

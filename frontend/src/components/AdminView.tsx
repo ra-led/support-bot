@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchRequestMessages, fetchRequests, fetchStats } from '../api'
+import { downloadIssuesExport, fetchRequestMessages, fetchRequests, fetchStats } from '../api'
 
 interface StatsResponse {
   total_requests: number
@@ -37,6 +37,7 @@ export default function AdminView() {
     title: string
     messages: { sender: string; content: string }[]
   } | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
 
   useEffect(() => {
     fetchStats().then(setStats).catch(() => setStats({ total_requests: 0, by_status: {} }))
@@ -52,10 +53,37 @@ export default function AdminView() {
     })
   }
 
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
+      const blob = await downloadIssuesExport()
+      const url = window.URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `issues-history-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.xlsx`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.URL.revokeObjectURL(url)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <div className="admin-view">
       <section className="panel admin-overview">
-        <h2>Admin Overview</h2>
+        <div className="admin-overview-header">
+          <h2>Admin Overview</h2>
+          <button
+            type="button"
+            className="btn subtle"
+            onClick={() => void handleExport()}
+            disabled={isExporting}
+          >
+            {isExporting ? 'Exporting...' : 'Export issues to Excel'}
+          </button>
+        </div>
         <p className="muted">Real-time intake status and operational queue</p>
         <div className="stat-grid">
           <article className="stat-card">

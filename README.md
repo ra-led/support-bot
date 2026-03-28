@@ -98,6 +98,10 @@ Provides additional text or answers to missing slots.
 
 Returns a simple count of requests by status.
 
+### GET `/v1/admin/export/issues.xlsx`
+
+Downloads full issues history as Excel for analytics (parsed request fields only, no conversation messages).
+
 ### POST `/v1/audio/transcribe`
 
 Transcribes uploaded voice recording using OpenAI Audio API (`whisper-1` by default).
