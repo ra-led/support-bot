@@ -27,6 +27,8 @@ interface ConversationMessage {
   content: string
 }
 
+const urgencyLabel = (urgency?: string) => (urgency && urgency !== 'unknown' ? urgency : 'not set')
+
 export default function ChatView() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'bot', content: 'Describe a facility issue and I will draft the request.' }
@@ -317,7 +319,7 @@ export default function ChatView() {
         <div className="sidebar-header">
           <div>
             <strong>Conversations</strong>
-            <p className="muted">{email}</p>
+            <p className="muted sidebar-subtitle">{email}</p>
           </div>
           <button type="button" onClick={handleNewRequest} className="btn subtle">
             New request
@@ -334,8 +336,11 @@ export default function ChatView() {
                 className={`conversation-item ${selectedRequestId === request.request_id ? 'active' : ''}`}
                 onClick={() => void handleSelectRequest(request.request_id)}
               >
-                <span className="conversation-title">{request.title}</span>
-                <span className={`status-pill status-${request.status}`}>{request.status}</span>
+                <div className="conversation-main">
+                  <span className="conversation-title">{request.title}</span>
+                  <span className="conversation-subline">Urgency: {urgencyLabel(request.urgency)}</span>
+                </div>
+                <span className={`status-pill status-${request.status}`}>{request.status.replace('_', ' ')}</span>
               </button>
             ))
           )}
@@ -344,7 +349,10 @@ export default function ChatView() {
 
       <section className="panel chat-card">
         <div className="chat-head">
-          <h2>Facility Chat</h2>
+          <div>
+            <h2>Facility Chat</h2>
+            <p className="muted chat-subtitle">Describe issues in free text, then review and submit.</p>
+          </div>
           {pendingRequest ? <span className="status-pill status-needs_clarification">Awaiting details</span> : null}
         </div>
 
@@ -354,6 +362,7 @@ export default function ChatView() {
               key={`${message.role}-${index}`}
               className={`chat-bubble ${message.role === 'user' ? 'from-user' : 'from-bot'}`}
             >
+              <span className="chat-role">{message.role === 'user' ? 'You' : 'Assistant'}</span>
               <div className="chat-content">{message.content}</div>
             </div>
           ))}
@@ -391,6 +400,9 @@ export default function ChatView() {
               ) : null}
               {hasRecording ? <span className="muted">Recording ready for Whisper transcription</span> : null}
               {isTranscribing ? <span className="muted">Transcribing with whisper-1...</span> : null}
+              {!isRecording && !hasRecording && !isTranscribing ? (
+                <span className="muted">Enter to send, Shift+Enter for newline.</span>
+              ) : null}
             </div>
             <div className="composer-actions">
               {isSupported ? (

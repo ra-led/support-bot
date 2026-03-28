@@ -54,9 +54,9 @@ export default function AdminView() {
 
   return (
     <div className="admin-view">
-      <section className="panel">
+      <section className="panel admin-overview">
         <h2>Admin Overview</h2>
-        <p className="muted">Real-time intake status</p>
+        <p className="muted">Real-time intake status and operational queue</p>
         <div className="stat-grid">
           <article className="stat-card">
             <h3>Total requests</h3>
@@ -72,7 +72,7 @@ export default function AdminView() {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel admin-requests">
         <h2>Extracted Requests</h2>
         <div className="request-list">
           {requests.length === 0 ? (
