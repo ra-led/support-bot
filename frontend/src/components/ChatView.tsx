@@ -48,7 +48,6 @@ export default function ChatView() {
   const [actionMessageId, setActionMessageId] = useState<string | null>(null)
   const messageCounterRef = useRef(2)
   const feedRef = useRef<HTMLDivElement | null>(null)
-  const audioUploadRef = useRef<HTMLInputElement | null>(null)
 
   const appendMessage = useCallback((role: ChatMessage['role'], content: ReactNode) => {
     const id = `m-${messageCounterRef.current}`
@@ -306,26 +305,6 @@ export default function ChatView() {
     }
   }
 
-  const handleUploadAudio = async (file: File) => {
-    setErrorMessage(null)
-    setIsTranscribing(true)
-    try {
-      const response = await transcribeAudio(
-        file,
-        'Facility and repair request from clinic branch staff.'
-      )
-      if (response.text?.trim()) {
-        setInput((prev) => (prev ? `${prev} ${response.text.trim()}` : response.text.trim()))
-      } else {
-        setErrorMessage('Transcription returned empty text.')
-      }
-    } catch {
-      setErrorMessage('Audio transcription failed. Please try again.')
-    } finally {
-      setIsTranscribing(false)
-    }
-  }
-
   if (!emailReady) {
     return (
       <div className="email-gate">
@@ -451,51 +430,27 @@ export default function ChatView() {
               ) : null}
             </div>
             <div className="composer-actions">
-              <button
-                type="button"
-                onClick={
-                  isSupported
-                    ? isRecording
-                      ? stop
-                      : () => void start()
-                    : () =>
-                        setErrorMessage(
-                          'Live microphone recording is unavailable here. Use localhost/HTTPS and microphone permissions, or upload an audio file.'
-                        )
-                }
-                className={`btn ${isRecording ? 'danger' : 'subtle'}`}
-              >
-                {isRecording ? 'Stop recording' : 'Record voice'}
-              </button>
-              <button
-                type="button"
-                onClick={() => audioUploadRef.current?.click()}
-                disabled={isTranscribing}
-                className="btn subtle"
-              >
-                Upload audio
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleTranscribeRecording()}
-                disabled={!hasRecording || isTranscribing}
-                className="btn subtle"
-              >
-                Transcribe
-              </button>
-              <input
-                ref={audioUploadRef}
-                type="file"
-                accept="audio/mp3,audio/mp4,audio/mpeg,audio/mpga,audio/m4a,audio/wav,audio/webm"
-                style={{ display: 'none' }}
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  if (file) {
-                    void handleUploadAudio(file)
-                  }
-                  event.currentTarget.value = ''
-                }}
-              />
+              {isSupported ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={isRecording ? stop : () => void start()}
+                    className={`btn ${isRecording ? 'danger' : 'subtle'}`}
+                  >
+                    {isRecording ? 'Stop recording' : 'Record voice'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleTranscribeRecording()}
+                    disabled={!hasRecording || isTranscribing}
+                    className="btn subtle"
+                  >
+                    Transcribe
+                  </button>
+                </>
+              ) : (
+                <span className="muted">Voice not supported in this browser</span>
+              )}
               <button
                 type="button"
                 onClick={() => void (pendingRequest ? handleClarify() : handleSend())}
