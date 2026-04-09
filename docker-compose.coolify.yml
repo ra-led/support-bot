@@ -1,0 +1,36 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.proxyapi.ru/openai/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.1-mini}
+      OPENAI_TRANSCRIBE_MODEL: ${OPENAI_TRANSCRIBE_MODEL:-whisper-1}
+    expose:
+      - "5051"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    expose:
+      - "5173"
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx.coolify
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    expose:
+      - "80"

@@ -78,6 +78,28 @@ class LLMClient:
         content = response.choices[0].message.content
         return self._safe_parse(content)
 
+    def transcribe_audio(
+        self,
+        audio_file: Any,
+        filename: str,
+        prompt: Optional[str] = None,
+    ) -> str:
+        if not self.enabled or self.client is None:
+            raise RuntimeError("OpenAI API key is not configured")
+
+        model = os.getenv("OPENAI_TRANSCRIBE_MODEL", "whisper-1")
+        response = self.client.audio.transcriptions.create(
+            model=model,
+            file=(filename, audio_file),
+            response_format="text",
+            prompt=prompt,
+        )
+
+        if isinstance(response, str):
+            return response.strip()
+        text = getattr(response, "text", "") or ""
+        return text.strip()
+
     def _safe_parse(self, content: str) -> Dict[str, Any]:
         try:
             return json.loads(content)
