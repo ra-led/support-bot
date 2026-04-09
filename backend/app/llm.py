@@ -12,25 +12,6 @@ from .storage import storage
 TAXONOMY_JSON = json.dumps(storage.get_taxonomy(), ensure_ascii=False)
 DEFAULT_TRANSCRIBE_PROMPT = "transcribe this voice message, return only message content"
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _load_env_from_file(path: Path) -> None:
-    if not path.exists():
-        return
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        if not key or key in os.environ:
-            continue
-        os.environ[key] = value.strip().strip("\"'")
-
-
-_load_env_from_file(REPO_ROOT / ".env")
-
 SYSTEM_PROMPT = f"""
 You are an assistant that extracts facility repair requests from user text.
 Return STRICT JSON only. Do not include markdown.
