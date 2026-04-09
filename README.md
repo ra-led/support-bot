@@ -4,7 +4,7 @@ Containerized MVP for the facility/repair request intake service described in `D
 
 ## What’s included
 
-- **Python + FastAPI backend** with LLM slot-filling (`/v1/intake/text`) and clarification flow (`/v1/requests/{id}/clarify`).
+- **Python + FastAPI backend** with LLM slot-filling (`/v1/intake/text`), clarification flow (`/v1/requests/{id}/clarify`), and Whisper transcription (`/v1/audio/transcribe`).
 - **Messenger-style requester UI** with a lightweight custom chat layout to keep dependencies minimal.
 - **Separated admin stats screen** for quick operational visibility.
 - **Docker + docker-compose** for local boot.
@@ -24,6 +24,7 @@ Optional overrides:
 ```bash
 export OPENAI_BASE_URL="https://api.proxyapi.ru/openai/v1"
 export OPENAI_MODEL="gpt-5.1-mini"
+export OPENAI_TRANSCRIBE_MODEL="whisper-1"
 ```
 
 ### 1b) Point the frontend at the backend API (optional)
@@ -96,6 +97,17 @@ Provides additional text or answers to missing slots.
 ### GET `/v1/admin/stats`
 
 Returns a simple count of requests by status.
+
+### GET `/v1/admin/export/issues.xlsx`
+
+Downloads full issues history as Excel for analytics (parsed request fields only, no conversation messages).
+
+### POST `/v1/audio/transcribe`
+
+Transcribes uploaded voice recording using OpenAI Audio API (`whisper-1` by default).
+
+- `file`: multipart audio file (`mp3`, `mp4`, `mpeg`, `mpga`, `m4a`, `wav`, `webm`)
+- `prompt`: optional recognition hint text
 
 ## Notes
 
