@@ -8,7 +8,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.proxyapi.ru/openai/v1}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.1-mini}
-      OPENAI_TRANSCRIBE_MODEL: ${OPENAI_TRANSCRIBE_MODEL:-whisper-1}
+      OPENAI_TRANSCRIBE_MODEL: ${OPENAI_TRANSCRIBE_MODEL:-xiaomi/mimo-v2-omni}
     expose:
       - "5051"
 

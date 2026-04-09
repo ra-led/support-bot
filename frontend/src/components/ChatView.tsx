@@ -424,7 +424,7 @@ export default function ChatView() {
                 </span>
               ) : null}
               {hasRecording ? <span className="muted">Recording ready for Whisper transcription</span> : null}
-              {isTranscribing ? <span className="muted">Transcribing with whisper-1...</span> : null}
+              {isTranscribing ? <span className="muted">Transcribing voice message...</span> : null}
               {!isRecording && !hasRecording && !isTranscribing ? (
                 <span className="muted">Enter to send, Shift+Enter for newline.</span>
               ) : null}

@@ -24,7 +24,7 @@ Optional overrides:
 ```bash
 export OPENAI_BASE_URL="https://api.proxyapi.ru/openai/v1"
 export OPENAI_MODEL="gpt-5.1-mini"
-export OPENAI_TRANSCRIBE_MODEL="whisper-1"
+export OPENAI_TRANSCRIBE_MODEL="xiaomi/mimo-v2-omni"
 ```
 
 ### 1b) Point the frontend at the backend API (optional)
@@ -104,7 +104,7 @@ Downloads full issues history as Excel for analytics (parsed request fields only
 
 ### POST `/v1/audio/transcribe`
 
-Transcribes uploaded voice recording using OpenAI Audio API (`whisper-1` by default).
+Transcribes uploaded voice recording using chat multimodal audio input (`xiaomi/mimo-v2-omni` by default).
 
 - `file`: multipart audio file (`mp3`, `mp4`, `mpeg`, `mpga`, `m4a`, `wav`, `webm`)
 - `prompt`: optional recognition hint text
