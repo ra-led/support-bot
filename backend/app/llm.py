@@ -91,7 +91,7 @@ class LLMClient:
             raise RuntimeError("OpenAI API key is not configured")
 
         model = os.getenv("OPENAI_TRANSCRIBE_MODEL", "xiaomi/mimo-v2-omni")
-        audio_format = self._detect_audio_format(filename)
+        audio_format = self._detect_audio_format(audio_file, filename)
         if audio_format is None:
             raise RuntimeError(
                 "Unsupported audio format. Use mp3, flac, m4a, wav, or ogg."
@@ -120,7 +120,22 @@ class LLMClient:
         message_content = response.choices[0].message.content
         return self._extract_text_content(message_content)
 
-    def _detect_audio_format(self, filename: str) -> Optional[str]:
+    def _detect_audio_format(self, audio_file: Any, filename: str) -> Optional[str]:
+        if isinstance(audio_file, (bytes, bytearray)):
+            header = bytes(audio_file[:32])
+            if header.startswith(b"RIFF") and header[8:12] == b"WAVE":
+                return "wav"
+            if header.startswith(b"fLaC"):
+                return "flac"
+            if header.startswith(b"OggS"):
+                return "ogg"
+            if header.startswith(b"ID3") or (len(header) > 1 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0):
+                return "mp3"
+            if b"ftyp" in header:
+                return "m4a"
+            if header.startswith(b"\x1A\x45\xDF\xA3"):  # EBML / webm/mkv
+                return None
+
         extension = Path(filename).suffix.lower().lstrip(".")
         if extension in {"mp3", "wav", "flac", "m4a", "ogg"}:
             return extension

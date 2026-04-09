@@ -42,6 +42,7 @@ const AUDIO_CONTEXT =
 
 const pickUploadName = (blob: Blob) => {
   const type = blob.type.toLowerCase()
+  if (type.includes('webm')) return 'recording.webm'
   if (type.includes('wav')) return 'recording.wav'
   if (type.includes('ogg')) return 'recording.ogg'
   if (type.includes('mpeg') || type.includes('mp3')) return 'recording.mp3'
@@ -177,6 +178,9 @@ export async function downloadIssuesExport() {
 export async function transcribeAudio(audioBlob: Blob, prompt?: string) {
   const isWebm = audioBlob.type.toLowerCase().includes('webm')
   const uploadBlob = isWebm ? await convertWebmToWav(audioBlob) : audioBlob
+  if (uploadBlob.type.toLowerCase().includes('webm')) {
+    throw new Error('Recorded audio format webm is not supported by the configured transcription model.')
+  }
   const uploadName = pickUploadName(uploadBlob)
   const formData = new FormData()
   formData.append('file', uploadBlob, uploadName)
