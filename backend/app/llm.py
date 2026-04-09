@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from base64 import b64encode
@@ -8,6 +9,8 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 
 from .storage import storage
+
+logger = logging.getLogger(__name__)
 
 TAXONOMY_JSON = json.dumps(storage.get_taxonomy(), ensure_ascii=False)
 DEFAULT_TRANSCRIBE_PROMPT = "transcribe this voice message, return only message content"
@@ -92,6 +95,18 @@ class LLMClient:
 
         model = os.getenv("OPENAI_TRANSCRIBE_MODEL", "xiaomi/mimo-v2-omni")
         audio_format = self._detect_audio_format(audio_file, filename)
+        raw_size = len(audio_file) if isinstance(audio_file, (bytes, bytearray)) else None
+        header_hex = (
+            bytes(audio_file[:16]).hex() if isinstance(audio_file, (bytes, bytearray)) else "n/a"
+        )
+        logger.info(
+            "[audio][llm] detected format=%s filename=%s model=%s size=%s header_hex=%s",
+            audio_format,
+            filename,
+            model,
+            raw_size,
+            header_hex,
+        )
         if audio_format is None:
             raise RuntimeError(
                 "Unsupported audio format. Use mp3, flac, m4a, wav, or ogg."
@@ -118,7 +133,9 @@ class LLMClient:
             ],
         )
         message_content = response.choices[0].message.content
-        return self._extract_text_content(message_content)
+        text = self._extract_text_content(message_content)
+        logger.info("[audio][llm] response received text_len=%s", len(text))
+        return text
 
     def _detect_audio_format(self, audio_file: Any, filename: str) -> Optional[str]:
         if isinstance(audio_file, (bytes, bytearray)):

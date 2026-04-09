@@ -35,6 +35,8 @@ export const api = axios.create({
   baseURL: apiBaseUrl
 })
 
+const AUDIO_DEBUG = true
+
 const AUDIO_CONTEXT =
   typeof window !== 'undefined'
     ? (window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
@@ -115,6 +117,15 @@ const convertWebmToWav = async (blob: Blob) => {
   }
 }
 
+const readHeaderHex = async (blob: Blob, bytes = 16) => {
+  const slice = blob.slice(0, bytes)
+  const buffer = await slice.arrayBuffer()
+  const view = new Uint8Array(buffer)
+  return Array.from(view)
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 export async function sendMessage(message: string, reporterEmail: string) {
   const response = await api.post('/v1/intake/text', {
     message_id: createMessageId(),
@@ -176,22 +187,53 @@ export async function downloadIssuesExport() {
 }
 
 export async function transcribeAudio(audioBlob: Blob, prompt?: string) {
+  const originalHeaderHex = await readHeaderHex(audioBlob)
+  if (AUDIO_DEBUG) {
+    console.log('[audio][front] original blob', {
+      type: audioBlob.type,
+      size: audioBlob.size,
+      headerHex: originalHeaderHex
+    })
+  }
+
   const isWebm = audioBlob.type.toLowerCase().includes('webm')
   const uploadBlob = isWebm ? await convertWebmToWav(audioBlob) : audioBlob
+  const uploadHeaderHex = await readHeaderHex(uploadBlob)
+  if (AUDIO_DEBUG) {
+    console.log('[audio][front] upload blob', {
+      convertedFromWebm: isWebm,
+      type: uploadBlob.type,
+      size: uploadBlob.size,
+      headerHex: uploadHeaderHex
+    })
+  }
   if (uploadBlob.type.toLowerCase().includes('webm')) {
     throw new Error('Recorded audio format webm is not supported by the configured transcription model.')
   }
   const uploadName = pickUploadName(uploadBlob)
+  if (AUDIO_DEBUG) {
+    console.log('[audio][front] upload filename', { uploadName, prompt })
+  }
   const formData = new FormData()
   formData.append('file', uploadBlob, uploadName)
   if (prompt) {
     formData.append('prompt', prompt)
   }
 
-  const response = await api.post('/v1/audio/transcribe', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data'
+  try {
+    const response = await api.post('/v1/audio/transcribe', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    if (AUDIO_DEBUG) {
+      console.log('[audio][front] transcribe success', response.data)
     }
-  })
-  return response.data as { text: string }
+    return response.data as { text: string }
+  } catch (error) {
+    if (AUDIO_DEBUG) {
+      console.error('[audio][front] transcribe error', error)
+    }
+    throw error
+  }
 }

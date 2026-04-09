@@ -1,4 +1,5 @@
 import io
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -10,6 +11,8 @@ from pydantic import BaseModel, Field
 
 from .llm import llm_client
 from .storage import storage
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_TAXONOMY_FIELDS = ("facilities_area", "impacted_service")
 LOCATION_DETAIL_FIELDS = ("building", "floor", "room", "free_text")
@@ -280,15 +283,38 @@ async def transcribe_audio(
     if len(content) > MAX_AUDIO_BYTES:
         raise HTTPException(status_code=400, detail="Audio file exceeds 25MB limit")
 
+    logger.info(
+        "[audio][back] request received filename=%s content_type=%s size=%s header_hex=%s prompt=%s",
+        file.filename,
+        file.content_type,
+        len(content),
+        content[:16].hex(),
+        prompt,
+    )
+
     try:
         text = llm_client.transcribe_audio(
             audio_file=content,
             filename=file.filename,
             prompt=prompt,
         )
+        logger.info(
+            "[audio][back] transcribe success filename=%s text_len=%s",
+            file.filename,
+            len(text),
+        )
     except RuntimeError as error:
+        logger.warning(
+            "[audio][back] transcribe runtime error filename=%s error=%s",
+            file.filename,
+            error,
+        )
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
+        logger.exception(
+            "[audio][back] transcribe provider error filename=%s",
+            file.filename,
+        )
         raise HTTPException(status_code=502, detail=f"Transcription failed: {error}") from error
 
     return {"text": text}
