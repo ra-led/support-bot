@@ -117,6 +117,11 @@ const convertWebmToWav = async (blob: Blob) => {
   }
 }
 
+const mustTranscodeToWav = (blob: Blob) => {
+  const type = blob.type.toLowerCase()
+  return type.includes('webm') || type.includes('mp4') || type.includes('m4a')
+}
+
 const readHeaderHex = async (blob: Blob, bytes = 16) => {
   const slice = blob.slice(0, bytes)
   const buffer = await slice.arrayBuffer()
@@ -196,19 +201,22 @@ export async function transcribeAudio(audioBlob: Blob, prompt?: string) {
     })
   }
 
-  const isWebm = audioBlob.type.toLowerCase().includes('webm')
-  const uploadBlob = isWebm ? await convertWebmToWav(audioBlob) : audioBlob
+  const mustTranscode = mustTranscodeToWav(audioBlob)
+  const uploadBlob = mustTranscode ? await convertWebmToWav(audioBlob) : audioBlob
   const uploadHeaderHex = await readHeaderHex(uploadBlob)
   if (AUDIO_DEBUG) {
     console.log('[audio][front] upload blob', {
-      convertedFromWebm: isWebm,
+      transcodedToWav: mustTranscode,
       type: uploadBlob.type,
       size: uploadBlob.size,
       headerHex: uploadHeaderHex
     })
   }
-  if (uploadBlob.type.toLowerCase().includes('webm')) {
-    throw new Error('Recorded audio format webm is not supported by the configured transcription model.')
+  if (mustTranscode && !uploadBlob.type.toLowerCase().includes('wav')) {
+    throw new Error('Failed to transcode recorded audio to wav. Browser returned unsupported format.')
+  }
+  if (uploadBlob.type.toLowerCase().includes('webm') || uploadBlob.type.toLowerCase().includes('mp4')) {
+    throw new Error('Recorded audio format is not supported by the configured transcription model.')
   }
   const uploadName = pickUploadName(uploadBlob)
   if (AUDIO_DEBUG) {

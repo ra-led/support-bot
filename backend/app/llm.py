@@ -6,7 +6,7 @@ from base64 import b64encode
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 
 from .storage import storage
 
@@ -114,24 +114,32 @@ class LLMClient:
         message_prompt = (prompt or DEFAULT_TRANSCRIBE_PROMPT).strip()
         encoded_audio = b64encode(audio_file).decode("ascii")
 
-        response = self.client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": message_prompt},
-                        {
-                            "type": "input_audio",
-                            "input_audio": {
-                                "data": encoded_audio,
-                                "format": audio_format,
+        try:
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": message_prompt},
+                            {
+                                "type": "input_audio",
+                                "input_audio": {
+                                    "data": encoded_audio,
+                                    "format": audio_format,
+                                },
                             },
-                        },
-                    ],
-                }
-            ],
-        )
+                        ],
+                    }
+                ],
+            )
+        except BadRequestError as error:
+            message = str(error).lower()
+            if "invalid audio format" in message:
+                raise RuntimeError(
+                    "Unsupported audio payload for current provider. Please send wav, mp3, flac, m4a, or ogg."
+                ) from error
+            raise
         message_content = response.choices[0].message.content
         text = self._extract_text_content(message_content)
         logger.info("[audio][llm] response received text_len=%s", len(text))
