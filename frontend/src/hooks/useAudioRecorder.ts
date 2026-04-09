@@ -2,7 +2,13 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 
 type RecorderState = 'idle' | 'recording' | 'ready'
 
-const PICKED_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+const PICKED_MIME_TYPES = [
+  'audio/mp4',
+  'audio/ogg;codecs=opus',
+  'audio/ogg',
+  'audio/webm;codecs=opus',
+  'audio/webm'
+]
 
 const getSupportedMimeType = () => {
   if (typeof MediaRecorder === 'undefined') {

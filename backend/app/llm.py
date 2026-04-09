@@ -92,6 +92,10 @@ class LLMClient:
 
         model = os.getenv("OPENAI_TRANSCRIBE_MODEL", "xiaomi/mimo-v2-omni")
         audio_format = self._detect_audio_format(filename)
+        if audio_format is None:
+            raise RuntimeError(
+                "Unsupported audio format. Use mp3, flac, m4a, wav, or ogg."
+            )
         message_prompt = (prompt or DEFAULT_TRANSCRIBE_PROMPT).strip()
         encoded_audio = b64encode(audio_file).decode("ascii")
 
@@ -116,11 +120,15 @@ class LLMClient:
         message_content = response.choices[0].message.content
         return self._extract_text_content(message_content)
 
-    def _detect_audio_format(self, filename: str) -> str:
+    def _detect_audio_format(self, filename: str) -> Optional[str]:
         extension = Path(filename).suffix.lower().lstrip(".")
-        if extension in {"mp3", "wav", "webm", "m4a", "mp4", "mpeg", "mpga"}:
+        if extension in {"mp3", "wav", "flac", "m4a", "ogg"}:
             return extension
-        return "wav"
+        if extension in {"mpeg", "mpga"}:
+            return "mp3"
+        if extension == "mp4":
+            return "m4a"
+        return None
 
     def _extract_text_content(self, content: Any) -> str:
         if isinstance(content, str):
