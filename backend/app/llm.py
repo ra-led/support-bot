@@ -1,6 +1,8 @@
 import json
 import os
 import re
+from base64 import b64encode
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
@@ -8,6 +10,26 @@ from openai import OpenAI
 from .storage import storage
 
 TAXONOMY_JSON = json.dumps(storage.get_taxonomy(), ensure_ascii=False)
+DEFAULT_TRANSCRIBE_PROMPT = "transcribe this voice message, return only message content"
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _load_env_from_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        os.environ[key] = value.strip().strip("\"'")
+
+
+_load_env_from_file(REPO_ROOT / ".env")
 
 SYSTEM_PROMPT = f"""
 You are an assistant that extracts facility repair requests from user text.
@@ -87,18 +109,48 @@ class LLMClient:
         if not self.enabled or self.client is None:
             raise RuntimeError("OpenAI API key is not configured")
 
-        model = os.getenv("OPENAI_TRANSCRIBE_MODEL", "whisper-1")
-        response = self.client.audio.transcriptions.create(
-            model=model,
-            file=(filename, audio_file),
-            response_format="text",
-            prompt=prompt,
-        )
+        model = os.getenv("OPENAI_TRANSCRIBE_MODEL", "xiaomi/mimo-v2-omni")
+        audio_format = self._detect_audio_format(filename)
+        message_prompt = (prompt or DEFAULT_TRANSCRIBE_PROMPT).strip()
+        encoded_audio = b64encode(audio_file).decode("ascii")
 
-        if isinstance(response, str):
-            return response.strip()
-        text = getattr(response, "text", "") or ""
-        return text.strip()
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": message_prompt},
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": encoded_audio,
+                                "format": audio_format,
+                            },
+                        },
+                    ],
+                }
+            ],
+        )
+        message_content = response.choices[0].message.content
+        return self._extract_text_content(message_content)
+
+    def _detect_audio_format(self, filename: str) -> str:
+        extension = Path(filename).suffix.lower().lstrip(".")
+        if extension in {"mp3", "wav", "webm", "m4a", "mp4", "mpeg", "mpga"}:
+            return extension
+        return "wav"
+
+    def _extract_text_content(self, content: Any) -> str:
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            chunks: List[str] = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text" and item.get("text"):
+                    chunks.append(str(item["text"]).strip())
+            return " ".join(chunk for chunk in chunks if chunk).strip()
+        return ""
 
     def _safe_parse(self, content: str) -> Dict[str, Any]:
         try:

@@ -290,7 +290,7 @@ export default function ChatView() {
     try {
       const response = await transcribeAudio(
         audioBlob,
-        'Facility and repair request from clinic branch staff.'
+        'transcribe this voice message, return only message content'
       )
       if (response.text?.trim()) {
         setInput((prev) => (prev ? `${prev} ${response.text.trim()}` : response.text.trim()))
