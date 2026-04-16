@@ -22,6 +22,7 @@ const resolveApiBaseUrl = () => {
 }
 
 const apiBaseUrl = resolveApiBaseUrl()
+const ADMIN_PASSWORD_STORAGE_KEY = 'supportBotAdminPassword'
 
 const createMessageId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -34,6 +35,28 @@ const createMessageId = () => {
 export const api = axios.create({
   baseURL: apiBaseUrl
 })
+
+const getStoredAdminPassword = () => {
+  if (typeof window === 'undefined') return ''
+  return localStorage.getItem(ADMIN_PASSWORD_STORAGE_KEY) || ''
+}
+
+const getAdminHeaders = () => {
+  const password = getStoredAdminPassword()
+  return password ? { 'X-Admin-Password': password } : {}
+}
+
+export const setAdminPassword = (password: string) => {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(ADMIN_PASSWORD_STORAGE_KEY, password)
+}
+
+export const clearAdminPassword = () => {
+  if (typeof window === 'undefined') return
+  localStorage.removeItem(ADMIN_PASSWORD_STORAGE_KEY)
+}
+
+export const getAdminPassword = () => getStoredAdminPassword()
 
 const AUDIO_DEBUG = true
 
@@ -163,12 +186,32 @@ export async function submitRequest(requestId: string) {
 }
 
 export async function fetchStats() {
-  const response = await api.get('/v1/admin/stats')
+  const response = await api.get('/v1/admin/stats', {
+    headers: getAdminHeaders()
+  })
   return response.data
 }
 
+export async function fetchAdminTaxonomy() {
+  const response = await api.get('/v1/admin/taxonomy', {
+    headers: getAdminHeaders()
+  })
+  return response.data as { facilities_areas: unknown[] }
+}
+
+export async function updateAdminTaxonomy(facilitiesAreas: unknown[]) {
+  const response = await api.put(
+    '/v1/admin/taxonomy',
+    { facilities_areas: facilitiesAreas },
+    { headers: getAdminHeaders() }
+  )
+  return response.data as { facilities_areas: unknown[] }
+}
+
 export async function fetchRequests() {
-  const response = await api.get('/v1/requests')
+  const response = await api.get('/v1/requests', {
+    headers: getAdminHeaders()
+  })
   return response.data
 }
 
@@ -179,13 +222,17 @@ export async function fetchRequestsForEmail(email: string) {
   return response.data
 }
 
-export async function fetchRequestMessages(requestId: string) {
-  const response = await api.get(`/v1/requests/${requestId}/messages`)
+export async function fetchRequestMessages(requestId: string, reporterEmail?: string) {
+  const response = await api.get(`/v1/requests/${requestId}/messages`, {
+    params: reporterEmail ? { reporter_email: reporterEmail } : undefined,
+    headers: reporterEmail ? undefined : getAdminHeaders()
+  })
   return response.data
 }
 
 export async function downloadIssuesExport() {
   const response = await api.get('/v1/admin/export/issues.xlsx', {
+    headers: getAdminHeaders(),
     responseType: 'blob'
   })
   return response.data as Blob

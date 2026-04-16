@@ -25,7 +25,10 @@ Optional overrides:
 export OPENAI_BASE_URL="https://api.proxyapi.ru/openai/v1"
 export OPENAI_MODEL="gpt-5.1-mini"
 export OPENAI_TRANSCRIBE_MODEL="xiaomi/mimo-v2-omni"
+export ADMIN_PASSWORD="denis"
 ```
+
+`ADMIN_PASSWORD` protects `/admin` and admin API endpoints. If not set, default is `denis`.
 
 ### 1b) Point the frontend at the backend API (optional)
 

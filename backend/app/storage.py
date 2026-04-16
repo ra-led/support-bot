@@ -1,7 +1,9 @@
 import datetime as dt
+import copy
 import json
 import sqlite3
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
@@ -319,13 +321,15 @@ DEFAULT_ANALYTICS_SCHEMA = [
     },
 ]
 
+TAXONOMY_FILE_PATH = Path(__file__).with_name("taxonomy.json")
+
 
 class Storage:
     def __init__(self, db_path: str = "data.db") -> None:
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_db()
-        self.taxonomy = DEFAULT_TAXONOMY
+        self.taxonomy = self._load_taxonomy_from_file()
         self.analytics_schema: Dict[str, List[Dict[str, Any]]] = {
             "default": DEFAULT_ANALYTICS_SCHEMA
         }
@@ -386,6 +390,35 @@ class Storage:
         if value is None:
             return None
         return json.loads(value)
+
+    def _validate_taxonomy(self, taxonomy: Any) -> List[Dict[str, Any]]:
+        try:
+            serialized = json.dumps(taxonomy, ensure_ascii=False)
+            parsed = json.loads(serialized)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"Taxonomy must be valid JSON: {error}") from error
+
+        if not isinstance(parsed, list):
+            raise ValueError("Taxonomy JSON must be an array of facility areas.")
+        return parsed
+
+    def _load_taxonomy_from_file(self) -> List[Dict[str, Any]]:
+        if not TAXONOMY_FILE_PATH.exists():
+            default_taxonomy = self._validate_taxonomy(DEFAULT_TAXONOMY)
+            TAXONOMY_FILE_PATH.write_text(
+                json.dumps(default_taxonomy, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            return default_taxonomy
+
+        raw = TAXONOMY_FILE_PATH.read_text(encoding="utf-8")
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"Taxonomy file {TAXONOMY_FILE_PATH} contains invalid JSON: {error}"
+            ) from error
+        return self._validate_taxonomy(parsed)
 
     def save_message(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         message_id = payload["message_id"]
@@ -583,7 +616,17 @@ class Storage:
         ]
 
     def get_taxonomy(self) -> List[Dict[str, Any]]:
-        return self.taxonomy
+        return copy.deepcopy(self.taxonomy)
+
+    def save_taxonomy(self, taxonomy: Any) -> None:
+        normalized = self._validate_taxonomy(taxonomy)
+        tmp_path = TAXONOMY_FILE_PATH.with_suffix(".json.tmp")
+        tmp_path.write_text(
+            json.dumps(normalized, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        tmp_path.replace(TAXONOMY_FILE_PATH)
+        self.taxonomy = normalized
 
     def get_analytics_schema(self, tenant_id: str) -> List[Dict[str, Any]]:
         return self.analytics_schema.get(tenant_id, DEFAULT_ANALYTICS_SCHEMA)

@@ -46,6 +46,7 @@ export default function ChatView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [actionMessageId, setActionMessageId] = useState<string | null>(null)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const messageCounterRef = useRef(2)
   const feedRef = useRef<HTMLDivElement | null>(null)
 
@@ -90,7 +91,7 @@ export default function ChatView() {
   }
 
   const loadConversation = async (requestId: string) => {
-    const data = await fetchRequestMessages(requestId)
+    const data = await fetchRequestMessages(requestId, email)
     const loaded = (data.messages as ConversationMessage[]).map((message) => ({
       id: `m-${messageCounterRef.current++}`,
       role: message.sender,
@@ -268,6 +269,7 @@ export default function ChatView() {
   }
 
   const handleSelectRequest = async (requestId: string) => {
+    setIsSidebarOpen(false)
     setSelectedRequestId(requestId)
     setPendingRequest(null)
     setCorrectionRequestId(null)
@@ -281,6 +283,27 @@ export default function ChatView() {
     setMessages([{ id: `m-${messageCounterRef.current++}`, role: 'bot', content: 'Describe the next facility issue.' }])
     setActionMessageId(null)
     setInput('')
+    setIsSidebarOpen(false)
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('supportBotEmail')
+    setEmail('')
+    setEmailReady(false)
+    setRememberSession(false)
+    setRequestList([])
+    setSelectedRequestId(null)
+    setPendingRequest(null)
+    setCorrectionRequestId(null)
+    setMessages([
+      { id: `m-${messageCounterRef.current++}`, role: 'bot', content: 'Describe a facility issue and I will draft the request.' }
+    ])
+    setActionMessageId(null)
+    setInput('')
+    setErrorMessage(null)
+    clear()
+    clearError()
+    setIsSidebarOpen(false)
   }
 
   const handleTranscribeRecording = async () => {
@@ -339,16 +362,30 @@ export default function ChatView() {
   }
 
   return (
-    <div className="chat-layout">
-      <aside className="panel chat-sidebar">
+    <div className={`chat-layout ${isSidebarOpen ? 'sidebar-open' : ''}`}>
+      <button
+        type="button"
+        className={`chat-sidebar-overlay ${isSidebarOpen ? 'visible' : ''}`}
+        aria-label="Close conversations panel"
+        onClick={() => setIsSidebarOpen(false)}
+      />
+      <aside className={`panel chat-sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <div>
             <strong>Conversations</strong>
             <p className="muted sidebar-subtitle">{email}</p>
           </div>
-          <button type="button" onClick={handleNewRequest} className="btn subtle">
-            New request
-          </button>
+          <div className="sidebar-actions">
+            <button type="button" onClick={() => setIsSidebarOpen(false)} className="btn subtle mobile-only">
+              Close
+            </button>
+            <button type="button" onClick={handleNewRequest} className="btn subtle">
+              New request
+            </button>
+            <button type="button" onClick={handleLogout} className="btn subtle">
+              Log out
+            </button>
+          </div>
         </div>
         <div className="sidebar-list">
           {requestList.length === 0 ? (
@@ -378,6 +415,9 @@ export default function ChatView() {
             <h2>Facility Chat</h2>
             <p className="muted chat-subtitle">Describe issues in free text, then review and submit.</p>
           </div>
+          <button type="button" className="btn subtle mobile-only" onClick={() => setIsSidebarOpen(true)}>
+            Threads
+          </button>
           {pendingRequest ? <span className="status-pill status-needs_clarification">Awaiting details</span> : null}
         </div>
 

@@ -12,10 +12,9 @@ from .storage import storage
 
 logger = logging.getLogger(__name__)
 
-TAXONOMY_JSON = json.dumps(storage.get_taxonomy(), ensure_ascii=False)
 DEFAULT_TRANSCRIBE_PROMPT = "transcribe this voice message, return only message content"
 
-SYSTEM_PROMPT = f"""
+SYSTEM_PROMPT_TEMPLATE = """
 You are an assistant that extracts facility repair requests from user text.
 Return STRICT JSON only. Do not include markdown.
 Use the taxonomy IDs below for facilities_area, impacted_service, and request_type.
@@ -56,7 +55,7 @@ Schema:
   ]
 }}
 Taxonomy:
-{TAXONOMY_JSON}
+{taxonomy_json}
 """.strip()
 
 
@@ -77,12 +76,16 @@ class LLMClient:
         response = self.client.chat.completions.create(
             model=os.getenv("OPENAI_MODEL", "gpt-5.1-mini"),
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self._build_system_prompt()},
                 {"role": "user", "content": message},
             ],
         )
         content = response.choices[0].message.content
         return self._safe_parse(content)
+
+    def _build_system_prompt(self) -> str:
+        taxonomy_json = json.dumps(storage.get_taxonomy(), ensure_ascii=False)
+        return SYSTEM_PROMPT_TEMPLATE.format(taxonomy_json=taxonomy_json)
 
     def transcribe_audio(
         self,

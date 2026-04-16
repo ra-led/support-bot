@@ -1,9 +1,11 @@
 import io
+import hmac
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
@@ -46,6 +48,7 @@ EXPORT_COLUMNS = [
     "confidence_location",
     "confidence_taxonomy",
 ]
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "denis")
 
 
 def _clean_value(value: Any) -> Optional[str]:
@@ -214,6 +217,10 @@ class AnalyticsSchemaUpdate(BaseModel):
     fields: List[Dict[str, Any]]
 
 
+class TaxonomyUpdate(BaseModel):
+    facilities_areas: List[Dict[str, Any]]
+
+
 app = FastAPI(title="Support Bot", version="0.1.0")
 
 app.add_middleware(
@@ -223,6 +230,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+
+def _assert_admin_password(x_admin_password: Optional[str]) -> None:
+    if not x_admin_password or not hmac.compare_digest(x_admin_password, ADMIN_PASSWORD):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 @app.post("/v1/intake/text")
@@ -396,20 +408,55 @@ async def get_request(request_id: str) -> Dict[str, Any]:
 
 
 @app.get("/v1/requests")
-async def list_requests(reporter_email: Optional[str] = None) -> Dict[str, Any]:
+async def list_requests(
+    reporter_email: Optional[str] = None,
+    x_admin_password: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    if reporter_email is None:
+        _assert_admin_password(x_admin_password)
     return {"requests": storage.list_requests(reporter_email=reporter_email)}
 
 
 @app.get("/v1/requests/{request_id}/messages")
-async def get_request_messages(request_id: str) -> Dict[str, Any]:
+async def get_request_messages(
+    request_id: str,
+    reporter_email: Optional[str] = None,
+    x_admin_password: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
     request = storage.get_request(request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
+    if reporter_email:
+        if request.get("reporter_email") != reporter_email:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        _assert_admin_password(x_admin_password)
     return {"request_id": request_id, "messages": storage.list_messages(request_id)}
 
 
 @app.get("/v1/taxonomy")
 async def get_taxonomy() -> Dict[str, Any]:
+    return {"facilities_areas": storage.get_taxonomy()}
+
+
+@app.get("/v1/admin/taxonomy")
+async def admin_get_taxonomy(
+    x_admin_password: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    _assert_admin_password(x_admin_password)
+    return {"facilities_areas": storage.get_taxonomy()}
+
+
+@app.put("/v1/admin/taxonomy")
+async def admin_update_taxonomy(
+    payload: TaxonomyUpdate,
+    x_admin_password: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    _assert_admin_password(x_admin_password)
+    try:
+        storage.save_taxonomy(payload.facilities_areas)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     return {"facilities_areas": storage.get_taxonomy()}
 
 
@@ -425,7 +472,8 @@ async def update_analytics_schema(payload: AnalyticsSchemaUpdate) -> Dict[str, A
 
 
 @app.get("/v1/admin/stats")
-async def admin_stats() -> Dict[str, Any]:
+async def admin_stats(x_admin_password: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    _assert_admin_password(x_admin_password)
     requests = storage.list_requests()
     by_status: Dict[str, int] = {}
     for request in requests:
@@ -439,7 +487,10 @@ async def admin_stats() -> Dict[str, Any]:
 
 
 @app.get("/v1/admin/export/issues.xlsx")
-async def export_issues_xlsx() -> StreamingResponse:
+async def export_issues_xlsx(
+    x_admin_password: Optional[str] = Header(default=None),
+) -> StreamingResponse:
+    _assert_admin_password(x_admin_password)
     requests = storage.list_requests()
     rows = [_flatten_request_for_export(request) for request in requests]
     payload = _build_issues_export_file(rows)
