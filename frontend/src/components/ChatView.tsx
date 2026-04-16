@@ -313,7 +313,7 @@ export default function ChatView() {
     try {
       const response = await transcribeAudio(
         audioBlob,
-        'Transcribe this voice message. Return only the recognized text. If no text is recognized, respond exactly: "no text was recognized".'
+        'Transcribe this voice message. Return only the recognized text. If no text is recognized, respond exactly: "no text was recognized". Answer only with recognized text or "no text was recognized", without any comments or additions'
       )
       if (response.text?.trim()) {
         setInput((prev) => (prev ? `${prev} ${response.text.trim()}` : response.text.trim()))
@@ -385,6 +385,9 @@ export default function ChatView() {
         </div>
         <div className="sidebar-list">
           <button type="button" className="conversation-item new-request-item" onClick={handleNewRequest}>
+            <span className="new-request-icon" aria-hidden="true">
+              +
+            </span>
             <div className="conversation-main">
               <span className="conversation-title">New request</span>
               <span className="conversation-subline">Start a new dialog</span>
