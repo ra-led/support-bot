@@ -260,7 +260,6 @@ export default function AdminView() {
           <input
             id="admin-password"
             type="password"
-            placeholder="denis"
             value={adminPassword}
             onChange={(event) => setAdminPasswordInput(event.target.value)}
             className="text-input"
