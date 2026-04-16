@@ -313,7 +313,7 @@ export default function ChatView() {
     try {
       const response = await transcribeAudio(
         audioBlob,
-        'transcribe this voice message, return only message content'
+        'Transcribe this voice message. Return only the recognized text. If no text is recognized, respond exactly: "no text was recognized".'
       )
       if (response.text?.trim()) {
         setInput((prev) => (prev ? `${prev} ${response.text.trim()}` : response.text.trim()))
@@ -327,6 +327,11 @@ export default function ChatView() {
       setIsTranscribing(false)
     }
   }
+
+  useEffect(() => {
+    if (!audioBlob || isRecording || isTranscribing) return
+    void handleTranscribeRecording()
+  }, [audioBlob, isRecording, isTranscribing])
 
   if (!emailReady) {
     return (
@@ -371,23 +376,20 @@ export default function ChatView() {
       />
       <aside className={`panel chat-sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <div>
-            <strong>Conversations</strong>
-            <p className="muted sidebar-subtitle">{email}</p>
-          </div>
+          <strong>Conversations</strong>
           <div className="sidebar-actions">
             <button type="button" onClick={() => setIsSidebarOpen(false)} className="btn subtle mobile-only">
               Close
             </button>
-            <button type="button" onClick={handleNewRequest} className="btn subtle">
-              New request
-            </button>
-            <button type="button" onClick={handleLogout} className="btn subtle">
-              Log out
-            </button>
           </div>
         </div>
         <div className="sidebar-list">
+          <button type="button" className="conversation-item new-request-item" onClick={handleNewRequest}>
+            <div className="conversation-main">
+              <span className="conversation-title">New request</span>
+              <span className="conversation-subline">Start a new dialog</span>
+            </div>
+          </button>
           {requestList.length === 0 ? (
             <p className="muted">No requests yet.</p>
           ) : (
@@ -407,17 +409,30 @@ export default function ChatView() {
             ))
           )}
         </div>
+        <div className="sidebar-footer">
+          <p className="muted sidebar-subtitle">{email}</p>
+          <button type="button" onClick={handleLogout} className="btn subtle">
+            Log out
+          </button>
+        </div>
       </aside>
 
       <section className="panel chat-card">
         <div className="chat-head">
-          <div>
-            <h2>Facility Chat</h2>
-            <p className="muted chat-subtitle">Describe issues in free text, then review and submit.</p>
+          <div className="chat-head-main">
+            <button
+              type="button"
+              className="btn subtle mobile-only burger-btn"
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open conversations"
+            >
+              <span className="burger-lines" aria-hidden="true" />
+            </button>
+            <div>
+              <h2>Facility Chat</h2>
+              <p className="muted chat-subtitle">Describe issues in free text, then review and submit.</p>
+            </div>
           </div>
-          <button type="button" className="btn subtle mobile-only" onClick={() => setIsSidebarOpen(true)}>
-            Threads
-          </button>
           {pendingRequest ? <span className="status-pill status-needs_clarification">Awaiting details</span> : null}
         </div>
 
@@ -463,7 +478,9 @@ export default function ChatView() {
                   Recording...
                 </span>
               ) : null}
-              {hasRecording ? <span className="muted">Recording ready for Whisper transcription</span> : null}
+              {hasRecording && !isTranscribing ? (
+                <span className="muted">Recording captured. Transcribing automatically...</span>
+              ) : null}
               {isTranscribing ? <span className="muted">Transcribing voice message...</span> : null}
               {!isRecording && !hasRecording && !isTranscribing ? (
                 <span className="muted">Enter to send, Shift+Enter for newline.</span>
@@ -478,14 +495,6 @@ export default function ChatView() {
                     className={`btn ${isRecording ? 'danger' : 'subtle'}`}
                   >
                     {isRecording ? 'Stop recording' : 'Record voice'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleTranscribeRecording()}
-                    disabled={!hasRecording || isTranscribing}
-                    className="btn subtle"
-                  >
-                    Transcribe
                   </button>
                 </>
               ) : (

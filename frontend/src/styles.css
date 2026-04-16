@@ -156,6 +156,16 @@ a {
   padding-right: 2px;
 }
 
+.sidebar-footer {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e3e8f2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .conversation-item {
   width: 100%;
   border: 1px solid #e3e8f2;
@@ -179,6 +189,10 @@ a {
 .conversation-item.active {
   border-color: #9fb4d6;
   background: linear-gradient(180deg, #f6f9ff 0%, #edf3fc 100%);
+}
+
+.new-request-item {
+  border-style: dashed;
 }
 
 .conversation-main {
@@ -219,6 +233,12 @@ a {
   margin-bottom: 10px;
 }
 
+.chat-head-main {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
 .chat-head h2 {
   margin: 0;
   font-size: 20px;
@@ -227,6 +247,44 @@ a {
 .chat-subtitle {
   margin: 4px 0 0;
   font-size: 12px;
+}
+
+.burger-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+}
+
+.burger-lines {
+  position: relative;
+  display: block;
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.burger-lines::before,
+.burger-lines::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.burger-lines::before {
+  top: -5px;
+}
+
+.burger-lines::after {
+  top: 5px;
 }
 
 .chat-feed {

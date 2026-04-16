@@ -334,6 +334,19 @@ export default function AdminView() {
         <p className="muted">Edit JSON, keep it valid, and save. Server writes this taxonomy into file.</p>
 
         <div className="taxonomy-layout">
+          <div className="taxonomy-editor-panel">
+            <h3>JSON editor</h3>
+            <textarea
+              className="taxonomy-editor"
+              value={taxonomyEditorValue}
+              onChange={(event) => handleTaxonomyEditorChange(event.target.value)}
+              spellCheck={false}
+            />
+            {taxonomyError ? <p className="error-text">Invalid JSON: {taxonomyError}</p> : null}
+            {taxonomySaveError ? <p className="error-text">{taxonomySaveError}</p> : null}
+            {taxonomySaveSuccess ? <p className="muted">{taxonomySaveSuccess}</p> : null}
+          </div>
+
           <div className="taxonomy-tree-panel">
             <h3>Tree preview</h3>
             {taxonomyPreview.length === 0 ? (
@@ -364,19 +377,6 @@ export default function AdminView() {
                 ))}
               </ul>
             )}
-          </div>
-
-          <div className="taxonomy-editor-panel">
-            <h3>Taxonomy JSON</h3>
-            <textarea
-              className="taxonomy-editor"
-              value={taxonomyEditorValue}
-              onChange={(event) => handleTaxonomyEditorChange(event.target.value)}
-              spellCheck={false}
-            />
-            {taxonomyError ? <p className="error-text">Invalid JSON: {taxonomyError}</p> : null}
-            {taxonomySaveError ? <p className="error-text">{taxonomySaveError}</p> : null}
-            {taxonomySaveSuccess ? <p className="muted">{taxonomySaveSuccess}</p> : null}
           </div>
         </div>
       </section>
