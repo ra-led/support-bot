@@ -135,15 +135,16 @@ class DialogAgent:
             extraction.get("taxonomy"),
         )
 
-        if request.get("description"):
-            dialog_state["problem"]["text"] = request["description"]
-        elif request.get("title"):
-            dialog_state["problem"]["text"] = request["title"]
+        candidate_problem = (request.get("description") or request.get("title") or "").strip()
+        if self._is_meaningful_problem_text(candidate_problem):
+            dialog_state["problem"]["text"] = candidate_problem
 
-        if dialog_state["problem"].get("text"):
+        if self._is_meaningful_problem_text(dialog_state["problem"].get("text") or ""):
             dialog_state["problem"]["confirmed"] = True
             if dialog_state.get("phase") == "collect":
                 dialog_state["phase"] = "confirm_problem"
+        else:
+            dialog_state["problem"]["confirmed"] = False
 
         taxonomy = request.get("taxonomy") or {}
         facilities_area = self._clean_value(taxonomy.get("facilities_area"))
@@ -226,21 +227,26 @@ class DialogAgent:
             filtered_missing.append(slot)
 
         if not dialog_state["problem"].get("confirmed"):
+            dialog_state["phase"] = "confirm_problem"
+            request["dialog_state"] = dialog_state
+            message = (
+                "Хочу убедиться, что правильно понял проблему. "
+                "Опишите, пожалуйста, что именно сломано/что нужно исправить."
+            )
             if dialog_state.get("clarify_attempts", 0) >= ask_budget:
-                dialog_state["problem"]["confirmed"] = True
-                if not dialog_state["problem"].get("text"):
-                    dialog_state["problem"]["text"] = request.get("description") or request.get("title") or "General issue"
-            else:
-                dialog_state["phase"] = "confirm_problem"
-                request["dialog_state"] = dialog_state
-                return {
-                    "request": request,
-                    "next_step": "ask",
-                    "working": {
-                        "ask_slots": ["problem"],
-                        "message": "Хочу убедиться, что правильно понял проблему. Опишите, пожалуйста, что именно не работает/что нужно исправить.",
-                    },
-                }
+                message = (
+                    "Пока не вижу описания самой проблемы. "
+                    "Без этого не смогу оформить заявку. "
+                    "Напишите одной фразой, что именно не работает."
+                )
+            return {
+                "request": request,
+                "next_step": "ask",
+                "working": {
+                    "ask_slots": ["problem"],
+                    "message": message,
+                },
+            }
 
         if filtered_missing and dialog_state.get("clarify_attempts", 0) < ask_budget:
             ask_slots = filtered_missing[:2]
@@ -322,14 +328,11 @@ class DialogAgent:
 
         dialog_state = request.get("dialog_state") or {}
         problem_text = ((dialog_state.get("problem") or {}).get("text") or "").strip()
-        if not problem_text:
+        if not self._is_meaningful_problem_text(problem_text):
             missing.append("problem")
 
         location = request.get("location") or {}
-        has_location_detail = any(
-            self._clean_value(location.get(field))
-            for field in ("building", "floor", "room", "free_text")
-        )
+        has_location_detail = self._has_specific_location_detail(location)
         if not has_location_detail:
             missing.append("location")
 
@@ -448,6 +451,57 @@ class DialogAgent:
             return user_text[:240]
         combined = f"{summary} | {user_text}"
         return combined[-600:]
+
+    def _has_specific_location_detail(self, location: Dict[str, Any]) -> bool:
+        building = (self._clean_value(location.get("building")) or "").lower()
+        if building and not self._is_generic_location_text(building):
+            return True
+        floor = (self._clean_value(location.get("floor")) or "").lower()
+        if floor and not self._is_generic_location_text(floor):
+            return True
+        room = (self._clean_value(location.get("room")) or "").lower()
+        if room and not self._is_generic_location_text(room):
+            return True
+        free_text = (self._clean_value(location.get("free_text")) or "").lower()
+        return bool(free_text and not self._is_generic_location_text(free_text))
+
+    def _is_generic_location_text(self, value: str) -> bool:
+        generic_markers = (
+            "all rooms",
+            "all room",
+            "all areas",
+            "every room",
+            "все комнаты",
+            "во всех комнатах",
+            "везде",
+        )
+        normalized = " ".join((value or "").split())
+        return normalized in generic_markers
+
+    def _is_meaningful_problem_text(self, text: str) -> bool:
+        normalized = " ".join((text or "").lower().split())
+        if len(normalized) < 8:
+            return False
+
+        generic = {
+            "facility request",
+            "facility request draft",
+            "new facility request",
+            "general issue",
+            "issue",
+            "problem",
+            "request",
+            "hello",
+            "hi",
+            "hey",
+            "привет",
+            "здравствуйте",
+        }
+        if normalized in generic:
+            return False
+        if normalized.startswith("facility request"):
+            return False
+        return True
 
 
 dialog_agent = DialogAgent()

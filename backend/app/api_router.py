@@ -77,6 +77,14 @@ def _find_or_create_active_request(payload: IntakeRequest) -> Dict[str, Any]:
     )
 
 
+def _is_valid_for_submit(request: Dict[str, Any]) -> bool:
+    status_ok = request.get("status") == "ready"
+    dialog_state = request.get("dialog_state") if isinstance(request.get("dialog_state"), dict) else {}
+    problem = dialog_state.get("problem") if isinstance(dialog_state.get("problem"), dict) else {}
+    problem_text = (problem.get("text") or "").strip()
+    return bool(status_ok and len(problem_text) >= 8)
+
+
 @router.post("/v1/intake/text")
 async def intake_text(payload: IntakeRequest) -> Dict[str, Any]:
     saved_message = storage.save_message(payload.dict())
@@ -216,6 +224,11 @@ async def submit_request(request_id: str) -> Dict[str, Any]:
     request = storage.get_request(request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
+    if not _is_valid_for_submit(request):
+        raise HTTPException(
+            status_code=409,
+            detail="Request is incomplete. Please describe the problem and required details first.",
+        )
     updated = storage.update_request(request_id, {"status": "submitted"})
     storage.add_message(request_id, "bot", "Submitted ✅ Your request is on the way.")
     return updated
