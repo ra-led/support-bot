@@ -82,9 +82,12 @@ def extract_requests(message: str, taxonomy: List[Dict[str, Any]]) -> Dict[str, 
         taxonomy_json=json.dumps(taxonomy, ensure_ascii=False)
     )
 
-    # Azure-compatible path: function-calling structured output.
-    # Native json_schema mode can fail on some providers with stricter schema validation.
-    structured_llm = llm.with_structured_output(RequestsSchema)
+    # Force function-calling mode for compatibility with Azure/OpenRouter gateways.
+    # Default mode in newer langchain-openai may use json_schema response_format.
+    structured_llm = llm.with_structured_output(
+        RequestsSchema,
+        method="function_calling",
+    )
     output = structured_llm.invoke(
         [
             {"role": "system", "content": system_prompt},
