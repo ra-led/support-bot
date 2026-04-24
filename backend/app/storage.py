@@ -364,6 +364,7 @@ class Storage:
                 missing_required_fields_json TEXT,
                 clarifying_questions_json TEXT,
                 confidence_json TEXT,
+                dialog_state_json TEXT,
                 status TEXT,
                 created_at TEXT,
                 updated_at TEXT
@@ -381,6 +382,17 @@ class Storage:
             )
             """
         )
+        self.conn.commit()
+        self._ensure_column("requests", "dialog_state_json", "TEXT")
+
+    def _ensure_column(self, table_name: str, column_name: str, column_sql: str) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = cursor.fetchall()
+        existing_columns = {column["name"] for column in columns}
+        if column_name in existing_columns:
+            return
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
         self.conn.commit()
 
     def _json_dump(self, value: Any) -> str:
@@ -468,8 +480,8 @@ class Storage:
                 request_id, tenant_id, branch_id, source_message_id, reporter_email,
                 title, description, urgency, location_json, taxonomy_json,
                 safety_or_access_impact, assets_json, missing_required_fields_json,
-                clarifying_questions_json, confidence_json, status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                clarifying_questions_json, confidence_json, dialog_state_json, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record["request_id"],
@@ -487,6 +499,7 @@ class Storage:
                 self._json_dump(record.get("missing_required_fields", [])),
                 self._json_dump(record.get("clarifying_questions", [])),
                 self._json_dump(record.get("confidence", {})),
+                self._json_dump(record.get("dialog_state", {})),
                 record.get("status"),
                 record["created_at"],
                 record["updated_at"],
@@ -522,6 +535,7 @@ class Storage:
                 missing_required_fields_json = ?,
                 clarifying_questions_json = ?,
                 confidence_json = ?,
+                dialog_state_json = ?,
                 status = ?,
                 updated_at = ?
             WHERE request_id = ?
@@ -541,6 +555,7 @@ class Storage:
                 self._json_dump(merged.get("missing_required_fields", [])),
                 self._json_dump(merged.get("clarifying_questions", [])),
                 self._json_dump(merged.get("confidence", {})),
+                self._json_dump(merged.get("dialog_state", {})),
                 merged.get("status"),
                 merged.get("updated_at"),
                 request_id,
@@ -566,6 +581,7 @@ class Storage:
             "missing_required_fields": self._json_load(row["missing_required_fields_json"]) or [],
             "clarifying_questions": self._json_load(row["clarifying_questions_json"]) or [],
             "confidence": self._json_load(row["confidence_json"]) or {},
+            "dialog_state": self._json_load(row["dialog_state_json"]) or {},
             "status": row["status"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
