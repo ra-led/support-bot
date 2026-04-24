@@ -82,7 +82,9 @@ def extract_requests(message: str, taxonomy: List[Dict[str, Any]]) -> Dict[str, 
         taxonomy_json=json.dumps(taxonomy, ensure_ascii=False)
     )
 
-    structured_llm = llm.with_structured_output(RequestsSchema, method="json_schema")
+    # Azure-compatible path: function-calling structured output.
+    # Native json_schema mode can fail on some providers with stricter schema validation.
+    structured_llm = llm.with_structured_output(RequestsSchema)
     output = structured_llm.invoke(
         [
             {"role": "system", "content": system_prompt},
