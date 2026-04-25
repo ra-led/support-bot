@@ -50,6 +50,8 @@ Rules:
 - If a slot is not present, return null for that field.
 - Do not infer missing location/taxonomy from older context.
 - If user explicitly says they don't know, use string "unknown" for that slot.
+- Normalize urgency into one of: low, normal, high, urgent, unknown.
+- For urgency, map intent phrases (not only exact enum words) into the enum.
 - Use taxonomy IDs only.
 Taxonomy:
 {taxonomy_json}
@@ -61,6 +63,7 @@ Merge extracted slot updates into the current request.
 Rules:
 - Preserve existing values unless extracted slot explicitly updates them.
 - If extracted slot value is "unknown", set the merged value to "unknown".
+- Keep urgency normalized to: low, normal, high, urgent, unknown.
 - Keep output consistent and concise.
 - Use taxonomy IDs only.
 Taxonomy:

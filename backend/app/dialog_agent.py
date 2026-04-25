@@ -98,15 +98,9 @@ class DialogAgent:
             merged = merge_request_with_delta(request, extraction, state["taxonomy"])
             self._apply_merged_fields(request, merged)
 
-        request["urgency"] = self._sanitize_urgency(request.get("urgency"), user_text)
+        request["urgency"] = self._normalize_urgency(request.get("urgency"))
 
         candidate_problem = (request.get("description") or request.get("title") or "").strip()
-        if (
-            not self._is_meaningful_problem_text(candidate_problem)
-            and self._should_take_user_text_as_problem(dialog_state, request, user_text)
-        ):
-            candidate_problem = user_text
-            request["description"] = user_text
 
         if self._is_meaningful_problem_text(candidate_problem):
             dialog_state["problem"]["text"] = candidate_problem
@@ -166,15 +160,13 @@ class DialogAgent:
             "status": self._slot_status(bool(impacted_service), slots.get("impacted_service", {}).get("status")),
         }
 
-        has_urgency = self._has_explicit_urgency_marker(user_text)
         slots["urgency"] = {
             "value": request.get("urgency") or "unknown",
-            "status": self._slot_status(has_urgency, slots.get("urgency", {}).get("status")),
+            "status": self._slot_status((request.get("urgency") or "") in {"low", "normal", "high", "urgent"}, slots.get("urgency", {}).get("status")),
         }
 
         self._update_slot_mentions(dialog_state, extraction, user_text)
         self._guard_unknown_updates(previous_request, request, dialog_state)
-        self._mark_unknown_from_text(dialog_state, request, user_text)
         dialog_state["rolling_summary"] = self._update_summary(dialog_state.get("rolling_summary") or "", user_text)
         request["dialog_state"] = dialog_state
         return {"request": request}
@@ -302,90 +294,12 @@ class DialogAgent:
             return "unknown"
         return "filled" if is_filled else "empty"
 
-    def _mark_unknown_from_text(self, dialog_state: Dict[str, Any], request: Dict[str, Any], user_text: str) -> None:
-        lowered = (user_text or "").lower()
-        if not lowered:
-            return
-        markers = ("не знаю", "не могу уточнить", "нет данных", "don't know", "can't provide", "not sure", "unknown", "unknow")
-        if not any(marker in lowered for marker in markers):
-            return
-
-        for slot in dialog_state.get("last_asked_slots", []):
-            if not (dialog_state.get("slot_mentioned") or {}).get(slot):
-                continue
-            slot_info = (dialog_state.get("slots") or {}).get(slot, {})
-            if slot_info.get("status") == "filled":
-                continue
-            dialog_state["slots"][slot] = {**slot_info, "status": "unknown", "value": "unknown"}
-            if slot == "problem":
-                dialog_state["problem"]["text"] = "unknown"
-                dialog_state["problem"]["confirmed"] = True
-            elif slot == "location":
-                location = request.get("location") if isinstance(request.get("location"), dict) else {}
-                location["free_text"] = "unknown"
-                request["location"] = location
-            elif slot == "facilities_area":
-                taxonomy = request.get("taxonomy") if isinstance(request.get("taxonomy"), dict) else {}
-                taxonomy["facilities_area"] = "unknown"
-                request["taxonomy"] = taxonomy
-            elif slot == "impacted_service":
-                taxonomy = request.get("taxonomy") if isinstance(request.get("taxonomy"), dict) else {}
-                taxonomy["impacted_service"] = "unknown"
-                request["taxonomy"] = taxonomy
-            elif slot == "urgency":
-                request["urgency"] = "unknown"
-
     def _has_specific_location_detail(self, location: Dict[str, Any]) -> bool:
-        building = (self._clean_value(location.get("building")) or "").lower()
-        if building and not self._is_generic_location_text(building):
-            return True
-        floor = (self._clean_value(location.get("floor")) or "").lower()
-        if floor and not self._is_generic_location_text(floor):
-            return True
-        room = (self._clean_value(location.get("room")) or "").lower()
-        if room and not self._is_generic_location_text(room):
-            return True
-        free_text = (self._clean_value(location.get("free_text")) or "").lower()
-        return bool(free_text and not self._is_generic_location_text(free_text) and self._is_specific_location_phrase(free_text))
-
-    def _is_generic_location_text(self, value: str) -> bool:
-        generic_markers = ("all rooms", "all room", "all areas", "every room", "все комнаты", "во всех комнатах", "везде")
-        normalized = " ".join((value or "").split())
-        return normalized in generic_markers
-
-    def _is_specific_location_phrase(self, text: str) -> bool:
-        cues = (
-            "room", "cabinet", "floor", "level", "building", "block", "branch", "site", "wing", "corridor",
-            "reception", "lobby", "entrance", "toilet", "bathroom", "kitchen", "warehouse", "office",
-            "кабинет", "этаж", "здание", "корпус", "офис", "склад", "ресепшн", "вход", "туалет", "кухня", "коридор",
-        )
-        return any(cue in text for cue in cues)
-
-    def _sanitize_urgency(self, urgency: Any, user_text: str) -> str:
-        normalized = (self._clean_value(urgency) or "unknown").lower()
-        if normalized in {"low", "normal", "high", "urgent"}:
-            return normalized
-
-        lowered = (user_text or "").lower()
-        normal_markers = ("normal", "standard", "usual", "обычно", "обычный", "стандартно", "нормально")
-        low_markers = ("not urgent", "can wait", "whenever possible", "не срочно", "может подождать")
-        urgent_markers = ("asap", "immediately", "right now", "emergency", "hazard", "срочно", "авария", "немедленно", "critical")
-        high_markers = ("high priority", "priority", "important", "важно", "приоритет", "very")
-
-        if any(m in lowered for m in high_markers):
-            return "high"
-        if any(m in lowered for m in normal_markers):
-            return "normal"
-        if any(m in lowered for m in low_markers):
-            return "low"
-        if "urgent" in lowered and "not urgent" not in lowered:
-            return "urgent"
-        if any(m in lowered for m in urgent_markers):
-            return "urgent"
-        return "unknown"
-
-    def _has_explicit_urgency_marker(self, user_text: str) -> bool:
-        return self._sanitize_urgency(None, user_text) in {"low", "normal", "high", "urgent"}
+        for key in ("building", "floor", "room", "free_text"):
+            value = self._clean_value((location or {}).get(key))
+            if value and value.lower() not in {"unknown", "unknow"}:
+                return True
+        return False
 
     def _update_slot_mentions(self, dialog_state: Dict[str, Any], extraction: Dict[str, Any], user_text: str) -> None:
         mentions = dialog_state.get("slot_mentioned")
@@ -411,7 +325,7 @@ class DialogAgent:
                 mentions["facilities_area"] = True
             if self._clean_value(taxonomy.get("impacted_service")):
                 mentions["impacted_service"] = True
-        if self._has_explicit_urgency_marker(user_text):
+        if self._clean_value(extraction.get("urgency") if isinstance(extraction, dict) else None):
             mentions["urgency"] = True
 
     def _guard_unknown_updates(self, previous_request: Dict[str, Any], request: Dict[str, Any], dialog_state: Dict[str, Any]) -> None:
@@ -444,7 +358,9 @@ class DialogAgent:
         slot_mentioned = dialog_state.get("slot_mentioned") if isinstance(dialog_state.get("slot_mentioned"), dict) else {}
 
         for slot in ("problem", "location", "facilities_area", "impacted_service", "urgency"):
-            if int(slot_attempts.get(slot, 0)) < 2:
+            # Ask each missing slot at most once. If user's response cannot fill it,
+            # mark as unknown and continue the dialog instead of looping.
+            if int(slot_attempts.get(slot, 0)) < 1:
                 continue
             if not slot_mentioned.get(slot):
                 continue
@@ -466,54 +382,23 @@ class DialogAgent:
             elif slot == "urgency":
                 request["urgency"] = "unknown"
 
-    def _should_take_user_text_as_problem(self, dialog_state: Dict[str, Any], request: Dict[str, Any], user_text: str) -> bool:
-        if not self._is_meaningful_problem_text(user_text):
-            return False
-        if self._is_urgency_only_phrase(user_text):
-            return False
-        lowered = user_text.lower()
-        unknown_markers = ("не знаю", "не могу уточнить", "нет данных", "don't know", "can't provide", "not sure")
-        if any(marker in lowered for marker in unknown_markers):
-            return False
-
-        last_asked = dialog_state.get("last_asked_slots", [])
-        if isinstance(last_asked, list) and "problem" in last_asked:
-            return True
-
-        problem_text = ((dialog_state.get("problem") or {}).get("text") or "").strip()
-        if self._is_meaningful_problem_text(problem_text):
-            return False
-        if self._has_specific_location_detail(request.get("location") or {}):
-            return False
-        return True
-
-    def _is_urgency_only_phrase(self, text: str) -> bool:
-        words = [w for w in (text or "").strip().lower().split() if w]
-        if not words:
-            return False
-        if len(words) > 4:
-            return False
-        return self._has_explicit_urgency_marker(text)
-
     def _is_meaningful_problem_text(self, text: str) -> bool:
-        normalized = " ".join((text or "").lower().split())
-        if len(normalized) < 8:
+        value = self._clean_value(text)
+        if not value:
             return False
-        generic = {
-            "facility request", "facility request draft", "new facility request", "general issue",
-            "issue", "problem", "request", "hello", "hi", "hey", "привет", "здравствуйте",
-        }
-        if normalized in generic:
-            return False
-        if normalized.startswith("facility request"):
-            return False
-        return True
+        return value.lower() not in {"unknown", "unknow"}
 
     def _is_filled_slot_value(self, value: Any) -> bool:
         cleaned = self._clean_value(value)
-        if cleaned:
-            return True
-        return isinstance(value, str) and bool(value.strip())
+        if not cleaned:
+            return False
+        return cleaned.lower() not in {"unknown", "unknow"}
+
+    def _normalize_urgency(self, urgency: Any) -> str:
+        cleaned = (self._clean_value(urgency) or "unknown").lower()
+        if cleaned in {"low", "normal", "high", "urgent"}:
+            return cleaned
+        return "unknown"
 
     def _history_to_messages(self, history: List[Dict[str, Any]]) -> List[Any]:
         messages: List[Any] = []
