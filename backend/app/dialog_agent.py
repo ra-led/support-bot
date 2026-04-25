@@ -74,6 +74,7 @@ class DialogAgent:
         dialog_state.setdefault("problem", {"text": "", "confirmed": False})
         dialog_state.setdefault("slots", {})
         dialog_state.setdefault("slot_attempts", {})
+        dialog_state.setdefault("slot_mentioned", {})
         dialog_state.setdefault("last_asked_slots", [])
         dialog_state.setdefault("clarify_attempts", 0)
         dialog_state.setdefault("ask_budget", 3)
@@ -91,6 +92,7 @@ class DialogAgent:
         extraction = state.get("extraction") or {}
         dialog_state = request["dialog_state"]
         user_text = (state.get("user_text") or "").strip()
+        previous_request = copy.deepcopy(request)
 
         if self._delta_has_values(extraction):
             merged = merge_request_with_delta(request, extraction, state["taxonomy"])
@@ -170,6 +172,8 @@ class DialogAgent:
             "status": self._slot_status(has_urgency, slots.get("urgency", {}).get("status")),
         }
 
+        self._update_slot_mentions(dialog_state, extraction, user_text)
+        self._guard_unknown_updates(previous_request, request, dialog_state)
         self._mark_unknown_from_text(dialog_state, request, user_text)
         dialog_state["rolling_summary"] = self._update_summary(dialog_state.get("rolling_summary") or "", user_text)
         request["dialog_state"] = dialog_state
@@ -179,6 +183,7 @@ class DialogAgent:
         request = state["request"]
         dialog_state = request["dialog_state"]
 
+        self._auto_mark_stuck_slots_unknown(request)
         missing = self._collect_missing_slots(request)
         if not missing:
             return {"request": request, "next_step": "submit", "working": {}}
@@ -289,7 +294,7 @@ class DialogAgent:
         if slot == "impacted_service":
             return "Уточните, что именно затронуто (например: дверь, туалет, кондиционер)."
         if slot == "urgency":
-            return "Насколько срочно это нужно решить? (low/normal/high/urgent). Если не знаете — напишите 'не знаю'."
+            return "Насколько срочно это нужно решить?"
         return "Уточните, пожалуйста, детали."
 
     def _slot_status(self, is_filled: bool, previous_status: Optional[str]) -> str:
@@ -301,11 +306,13 @@ class DialogAgent:
         lowered = (user_text or "").lower()
         if not lowered:
             return
-        markers = ("не знаю", "не могу уточнить", "нет данных", "don't know", "can't provide", "not sure")
+        markers = ("не знаю", "не могу уточнить", "нет данных", "don't know", "can't provide", "not sure", "unknown", "unknow")
         if not any(marker in lowered for marker in markers):
             return
 
         for slot in dialog_state.get("last_asked_slots", []):
+            if not (dialog_state.get("slot_mentioned") or {}).get(slot):
+                continue
             slot_info = (dialog_state.get("slots") or {}).get(slot, {})
             if slot_info.get("status") == "filled":
                 continue
@@ -362,8 +369,8 @@ class DialogAgent:
         lowered = (user_text or "").lower()
         normal_markers = ("normal", "standard", "usual", "обычно", "обычный", "стандартно", "нормально")
         low_markers = ("not urgent", "can wait", "whenever possible", "не срочно", "может подождать")
-        urgent_markers = ("asap", "immediately", "right now", "emergency", "hazard", "срочно", "авария", "немедленно")
-        high_markers = ("high priority", "priority", "important", "важно", "приоритет")
+        urgent_markers = ("asap", "immediately", "right now", "emergency", "hazard", "срочно", "авария", "немедленно", "critical")
+        high_markers = ("high priority", "priority", "important", "важно", "приоритет", "very")
 
         if any(m in lowered for m in high_markers):
             return "high"
@@ -379,6 +386,83 @@ class DialogAgent:
 
     def _has_explicit_urgency_marker(self, user_text: str) -> bool:
         return self._sanitize_urgency(None, user_text) in {"low", "normal", "high", "urgent"}
+
+    def _update_slot_mentions(self, dialog_state: Dict[str, Any], extraction: Dict[str, Any], user_text: str) -> None:
+        mentions = dialog_state.get("slot_mentioned")
+        if not isinstance(mentions, dict):
+            mentions = {}
+            dialog_state["slot_mentioned"] = mentions
+
+        for slot in dialog_state.get("last_asked_slots", []):
+            if (user_text or "").strip():
+                mentions[slot] = True
+
+        if self._clean_value((extraction.get("description") if isinstance(extraction, dict) else None)) or self._clean_value(
+            extraction.get("title") if isinstance(extraction, dict) else None
+        ):
+            mentions["problem"] = True
+        if isinstance(extraction.get("location") if isinstance(extraction, dict) else None, dict):
+            location = extraction.get("location") or {}
+            if any(self._clean_value(v) for v in location.values()):
+                mentions["location"] = True
+        if isinstance(extraction.get("taxonomy") if isinstance(extraction, dict) else None, dict):
+            taxonomy = extraction.get("taxonomy") or {}
+            if self._clean_value(taxonomy.get("facilities_area")):
+                mentions["facilities_area"] = True
+            if self._clean_value(taxonomy.get("impacted_service")):
+                mentions["impacted_service"] = True
+        if self._has_explicit_urgency_marker(user_text):
+            mentions["urgency"] = True
+
+    def _guard_unknown_updates(self, previous_request: Dict[str, Any], request: Dict[str, Any], dialog_state: Dict[str, Any]) -> None:
+        mentions = dialog_state.get("slot_mentioned") if isinstance(dialog_state.get("slot_mentioned"), dict) else {}
+        asked = set(dialog_state.get("last_asked_slots") or [])
+
+        if (request.get("urgency") or "").strip().lower() in {"unknown", "unknow"} and not (mentions.get("urgency") or "urgency" in asked):
+            request["urgency"] = previous_request.get("urgency")
+
+        current_location = request.get("location") if isinstance(request.get("location"), dict) else {}
+        previous_location = previous_request.get("location") if isinstance(previous_request.get("location"), dict) else {}
+        if (self._clean_value(current_location.get("free_text")) or "").lower() in {"unknown", "unknow"} and not (
+            mentions.get("location") or "location" in asked
+        ):
+            request["location"] = previous_location
+
+        current_taxonomy = request.get("taxonomy") if isinstance(request.get("taxonomy"), dict) else {}
+        previous_taxonomy = previous_request.get("taxonomy") if isinstance(previous_request.get("taxonomy"), dict) else {}
+        for slot, key in (("facilities_area", "facilities_area"), ("impacted_service", "impacted_service")):
+            value = (self._clean_value(current_taxonomy.get(key)) or "").lower()
+            if value in {"unknown", "unknow"} and not (mentions.get(slot) or slot in asked):
+                current_taxonomy[key] = previous_taxonomy.get(key)
+        request["taxonomy"] = current_taxonomy
+
+    def _auto_mark_stuck_slots_unknown(self, request: Dict[str, Any]) -> None:
+        dialog_state = request.get("dialog_state") if isinstance(request.get("dialog_state"), dict) else {}
+        slot_attempts = dialog_state.get("slot_attempts") if isinstance(dialog_state.get("slot_attempts"), dict) else {}
+        slot_mentioned = dialog_state.get("slot_mentioned") if isinstance(dialog_state.get("slot_mentioned"), dict) else {}
+
+        for slot in ("problem", "location", "facilities_area", "impacted_service", "urgency"):
+            if int(slot_attempts.get(slot, 0)) < 2:
+                continue
+            if not slot_mentioned.get(slot):
+                continue
+            slot_info = (dialog_state.get("slots") or {}).get(slot, {})
+            if slot_info.get("status") == "filled":
+                continue
+
+            dialog_state["slots"][slot] = {**slot_info, "status": "unknown", "value": "unknown"}
+            if slot == "problem":
+                dialog_state["problem"] = {"text": "unknown", "confirmed": True}
+            elif slot == "location":
+                location = request.get("location") if isinstance(request.get("location"), dict) else {}
+                location["free_text"] = "unknown"
+                request["location"] = location
+            elif slot in {"facilities_area", "impacted_service"}:
+                taxonomy = request.get("taxonomy") if isinstance(request.get("taxonomy"), dict) else {}
+                taxonomy[slot] = "unknown"
+                request["taxonomy"] = taxonomy
+            elif slot == "urgency":
+                request["urgency"] = "unknown"
 
     def _should_take_user_text_as_problem(self, dialog_state: Dict[str, Any], request: Dict[str, Any], user_text: str) -> bool:
         if not self._is_meaningful_problem_text(user_text):
