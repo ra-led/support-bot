@@ -96,7 +96,7 @@ class DialogAgent:
 
         if self._delta_has_values(extraction):
             merged = merge_request_with_delta(request, extraction, state["taxonomy"])
-            self._apply_merged_fields(request, merged)
+            self._apply_merged_fields(request, merged, extraction)
 
         request["urgency"] = self._normalize_urgency(request.get("urgency"))
 
@@ -222,14 +222,18 @@ class DialogAgent:
         request["status"] = "submitted"
         return {"request": request}
 
-    def _apply_merged_fields(self, request: Dict[str, Any], merged: Dict[str, Any]) -> None:
+    def _apply_merged_fields(self, request: Dict[str, Any], merged: Dict[str, Any], slot_delta: Dict[str, Any]) -> None:
         for key in ("title", "description", "urgency", "safety_or_access_impact"):
             cleaned = self._clean_value(merged.get(key)) if key != "safety_or_access_impact" else merged.get(key)
             if cleaned is not None:
                 request[key] = cleaned
 
         request["location"] = self._merge_nested(request.get("location"), merged.get("location"))
-        request["taxonomy"] = self._merge_nested(request.get("taxonomy"), merged.get("taxonomy"))
+        request["taxonomy"] = self._merge_taxonomy_from_delta(
+            request.get("taxonomy"),
+            merged.get("taxonomy"),
+            slot_delta.get("taxonomy") if isinstance(slot_delta, dict) else None,
+        )
 
         if isinstance(merged.get("assets"), list):
             request["assets"] = merged["assets"]
@@ -418,6 +422,22 @@ class DialogAgent:
             cleaned = self._clean_value(value)
             if cleaned is not None:
                 result[key] = cleaned
+        return result
+
+    def _merge_taxonomy_from_delta(self, old: Any, merged_taxonomy: Any, delta_taxonomy: Any) -> Dict[str, Any]:
+        result = copy.deepcopy(old) if isinstance(old, dict) else {}
+        if not isinstance(merged_taxonomy, dict):
+            return result
+        if not isinstance(delta_taxonomy, dict):
+            return result
+
+        for key in ("facilities_area", "impacted_service", "request_type"):
+            delta_value = self._clean_value(delta_taxonomy.get(key))
+            if delta_value is None:
+                continue
+            merged_value = self._clean_value(merged_taxonomy.get(key))
+            if merged_value is not None:
+                result[key] = merged_value
         return result
 
     def _clean_value(self, value: Any) -> Optional[str]:

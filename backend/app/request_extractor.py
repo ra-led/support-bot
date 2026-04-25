@@ -52,6 +52,10 @@ Rules:
 - If user explicitly says they don't know, use string "unknown" for that slot.
 - Normalize urgency into one of: low, normal, high, urgent, unknown.
 - For urgency, map intent phrases (not only exact enum words) into the enum.
+- Taxonomy mapping must be conservative:
+  - Set taxonomy IDs only when the message clearly describes a concrete facilities category/service.
+  - If the message is ambiguous, unusual, or does not clearly match taxonomy, set taxonomy fields to "unknown" (not a guessed ID).
+  - Do not choose taxonomy IDs based only on threat wording, urgency, or general suspicion.
 - Use taxonomy IDs only.
 Taxonomy:
 {taxonomy_json}
@@ -64,6 +68,7 @@ Rules:
 - Preserve existing values unless extracted slot explicitly updates them.
 - If extracted slot value is "unknown", set the merged value to "unknown".
 - Keep urgency normalized to: low, normal, high, urgent, unknown.
+- Do not invent new taxonomy IDs. Update taxonomy only from explicit slot_delta taxonomy values.
 - Keep output consistent and concise.
 - Use taxonomy IDs only.
 Taxonomy:
