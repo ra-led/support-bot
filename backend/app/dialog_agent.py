@@ -90,14 +90,22 @@ class DialogAgent:
         request = state["request"]
         extraction = state.get("extraction") or {}
         dialog_state = request["dialog_state"]
+        user_text = (state.get("user_text") or "").strip()
 
         if self._delta_has_values(extraction):
             merged = merge_request_with_delta(request, extraction, state["taxonomy"])
             self._apply_merged_fields(request, merged)
 
-        request["urgency"] = self._sanitize_urgency(request.get("urgency"), state["user_text"])
+        request["urgency"] = self._sanitize_urgency(request.get("urgency"), user_text)
 
         candidate_problem = (request.get("description") or request.get("title") or "").strip()
+        if (
+            not self._is_meaningful_problem_text(candidate_problem)
+            and self._should_take_user_text_as_problem(dialog_state, request, user_text)
+        ):
+            candidate_problem = user_text
+            request["description"] = user_text
+
         if self._is_meaningful_problem_text(candidate_problem):
             dialog_state["problem"]["text"] = candidate_problem
             dialog_state["problem"]["confirmed"] = True
@@ -156,14 +164,14 @@ class DialogAgent:
             "status": self._slot_status(bool(impacted_service), slots.get("impacted_service", {}).get("status")),
         }
 
-        has_urgency = self._has_explicit_urgency_marker(state["user_text"])
+        has_urgency = self._has_explicit_urgency_marker(user_text)
         slots["urgency"] = {
             "value": request.get("urgency") or "unknown",
             "status": self._slot_status(has_urgency, slots.get("urgency", {}).get("status")),
         }
 
-        self._mark_unknown_from_text(dialog_state, request, state["user_text"])
-        dialog_state["rolling_summary"] = self._update_summary(dialog_state.get("rolling_summary") or "", state["user_text"])
+        self._mark_unknown_from_text(dialog_state, request, user_text)
+        dialog_state["rolling_summary"] = self._update_summary(dialog_state.get("rolling_summary") or "", user_text)
         request["dialog_state"] = dialog_state
         return {"request": request}
 
@@ -371,6 +379,27 @@ class DialogAgent:
 
     def _has_explicit_urgency_marker(self, user_text: str) -> bool:
         return self._sanitize_urgency(None, user_text) in {"low", "normal", "high", "urgent"}
+
+    def _should_take_user_text_as_problem(self, dialog_state: Dict[str, Any], request: Dict[str, Any], user_text: str) -> bool:
+        if not self._is_meaningful_problem_text(user_text):
+            return False
+        lowered = user_text.lower()
+        unknown_markers = ("не знаю", "не могу уточнить", "нет данных", "don't know", "can't provide", "not sure")
+        if any(marker in lowered for marker in unknown_markers):
+            return False
+
+        last_asked = dialog_state.get("last_asked_slots", [])
+        if isinstance(last_asked, list) and "problem" in last_asked:
+            return True
+
+        problem_text = ((dialog_state.get("problem") or {}).get("text") or "").strip()
+        if self._is_meaningful_problem_text(problem_text):
+            return False
+        if self._has_specific_location_detail(request.get("location") or {}):
+            return False
+        if self._has_explicit_urgency_marker(user_text):
+            return False
+        return True
 
     def _is_meaningful_problem_text(self, text: str) -> bool:
         normalized = " ".join((text or "").lower().split())
