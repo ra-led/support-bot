@@ -1,6 +1,7 @@
 import datetime as dt
 import copy
 import json
+import os
 import sqlite3
 import uuid
 from pathlib import Path
@@ -325,8 +326,10 @@ TAXONOMY_FILE_PATH = Path(__file__).with_name("taxonomy.json")
 
 
 class Storage:
-    def __init__(self, db_path: str = "data.db") -> None:
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+    def __init__(self, db_path: Optional[str] = None) -> None:
+        resolved_db_path = db_path or os.getenv("DATA_DB_PATH", "data.db")
+        Path(resolved_db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(resolved_db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_db()
         self.taxonomy = self._load_taxonomy_from_file()
