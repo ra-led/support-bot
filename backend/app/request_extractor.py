@@ -23,11 +23,14 @@ class TaxonomySchema(BaseModel):
     request_type: Optional[str] = None
 
 
-class ConfidenceSchema(BaseModel):
-    overall: float = 0.0
-    urgency: float = 0.0
-    location: float = 0.0
-    taxonomy: float = 0.0
+class SlotDeltaSchema(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    urgency: Optional[str] = None
+    location: Optional[LocationSchema] = None
+    taxonomy: Optional[TaxonomySchema] = None
+    safety_or_access_impact: Optional[bool] = None
+    assets: Optional[List[Dict[str, Optional[str]]]] = None
 
 
 class RequestItemSchema(BaseModel):
@@ -38,21 +41,28 @@ class RequestItemSchema(BaseModel):
     taxonomy: TaxonomySchema = Field(default_factory=TaxonomySchema)
     safety_or_access_impact: Optional[bool] = None
     assets: List[Dict[str, Optional[str]]] = Field(default_factory=list)
-    missing_required_fields: List[str] = Field(default_factory=list)
-    clarifying_questions: List[str] = Field(default_factory=list)
-    confidence: ConfidenceSchema = Field(default_factory=ConfidenceSchema)
 
 
-class RequestsSchema(BaseModel):
-    requests: List[RequestItemSchema] = Field(default_factory=list)
+SLOT_EXTRACTION_PROMPT = """
+Extract slot values from the LATEST user message only.
+Rules:
+- Return only values explicitly present in the latest message.
+- If a slot is not present, return null for that field.
+- Do not infer missing location/taxonomy from older context.
+- If user explicitly says they don't know, use string "unknown" for that slot.
+- Use taxonomy IDs only.
+Taxonomy:
+{taxonomy_json}
+""".strip()
 
 
-SYSTEM_PROMPT_TEMPLATE = """
-You are an assistant that extracts facility repair requests from user text.
-Return strictly using the provided schema.
-Use the taxonomy IDs below for facilities_area, impacted_service, and request_type.
-If multiple issues are described, split them into multiple requests.
-Only use "unknown" or null when the user explicitly says they don't know.
+MERGE_PROMPT = """
+Merge extracted slot updates into the current request.
+Rules:
+- Preserve existing values unless extracted slot explicitly updates them.
+- If extracted slot value is "unknown", set the merged value to "unknown".
+- Keep output consistent and concise.
+- Use taxonomy IDs only.
 Taxonomy:
 {taxonomy_json}
 """.strip()
@@ -63,9 +73,7 @@ def _get_llm() -> ChatOpenAI:
     api_key = os.getenv("OPENAI_API_KEY")
     base_url = os.getenv("OPENAI_BASE_URL")
     if not api_key or not base_url:
-        raise RuntimeError(
-            "OPENAI_API_KEY and OPENAI_BASE_URL are required for LangGraph request extraction"
-        )
+        raise RuntimeError("OPENAI_API_KEY and OPENAI_BASE_URL are required")
 
     model_name = os.getenv("OPENAI_MODEL", "gpt-5.1-mini")
     return ChatOpenAI(
@@ -76,27 +84,68 @@ def _get_llm() -> ChatOpenAI:
     )
 
 
-def extract_requests(message: str, taxonomy: List[Dict[str, Any]]) -> Dict[str, Any]:
+def extract_slot_delta(message: str, taxonomy: List[Dict[str, Any]]) -> Dict[str, Any]:
     llm = _get_llm()
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
-        taxonomy_json=json.dumps(taxonomy, ensure_ascii=False)
-    )
+    prompt = SLOT_EXTRACTION_PROMPT.format(taxonomy_json=json.dumps(taxonomy, ensure_ascii=False))
 
-    # Force function-calling mode for compatibility with Azure/OpenRouter gateways.
-    # Default mode in newer langchain-openai may use json_schema response_format.
-    structured_llm = llm.with_structured_output(
-        RequestsSchema,
-        method="function_calling",
-    )
+    structured_llm = llm.with_structured_output(SlotDeltaSchema, method="function_calling")
     output = structured_llm.invoke(
         [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": prompt},
             {"role": "user", "content": message},
         ]
     )
 
-    if isinstance(output, RequestsSchema):
+    if isinstance(output, SlotDeltaSchema):
         return output.model_dump()
     if isinstance(output, dict):
         return output
-    return {"requests": []}
+    return {}
+
+
+def merge_request_with_delta(
+    current_request: Dict[str, Any],
+    slot_delta: Dict[str, Any],
+    taxonomy: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    llm = _get_llm()
+    prompt = MERGE_PROMPT.format(taxonomy_json=json.dumps(taxonomy, ensure_ascii=False))
+
+    structured_llm = llm.with_structured_output(RequestItemSchema, method="function_calling")
+    output = structured_llm.invoke(
+        [
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "current_request": {
+                            "title": current_request.get("title"),
+                            "description": current_request.get("description"),
+                            "urgency": current_request.get("urgency"),
+                            "location": current_request.get("location"),
+                            "taxonomy": current_request.get("taxonomy"),
+                            "safety_or_access_impact": current_request.get("safety_or_access_impact"),
+                            "assets": current_request.get("assets", []),
+                        },
+                        "slot_delta": slot_delta,
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ]
+    )
+
+    if isinstance(output, RequestItemSchema):
+        return output.model_dump()
+    if isinstance(output, dict):
+        return output
+    return {
+        "title": current_request.get("title") or "",
+        "description": current_request.get("description") or "",
+        "urgency": current_request.get("urgency") or "unknown",
+        "location": current_request.get("location") or {},
+        "taxonomy": current_request.get("taxonomy") or {},
+        "safety_or_access_impact": current_request.get("safety_or_access_impact"),
+        "assets": current_request.get("assets", []),
+    }

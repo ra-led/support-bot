@@ -78,7 +78,7 @@ def _find_or_create_active_request(payload: IntakeRequest) -> Dict[str, Any]:
 
 
 def _is_valid_for_submit(request: Dict[str, Any]) -> bool:
-    status_ok = request.get("status") == "ready"
+    status_ok = request.get("status") in {"ready", "submitted"}
     dialog_state = request.get("dialog_state") if isinstance(request.get("dialog_state"), dict) else {}
     problem = dialog_state.get("problem") if isinstance(dialog_state.get("problem"), dict) else {}
     problem_text = (problem.get("text") or "").strip()
@@ -129,6 +129,8 @@ async def intake_text(payload: IntakeRequest) -> Dict[str, Any]:
     record = storage.update_request(request["request_id"], agent_result.request)
     if record.get("clarifying_questions"):
         storage.add_message(record["request_id"], "bot", record["clarifying_questions"][0])
+    elif record.get("status") == "submitted":
+        storage.add_message(record["request_id"], "bot", "Submitted ✅ Your request is on the way.")
     else:
         storage.add_message(record["request_id"], "bot", "All required slots are filled.")
     requests_output = [record]
@@ -209,10 +211,10 @@ async def clarify_request(request_id: str, payload: ClarifyRequest) -> Dict[str,
         raise HTTPException(status_code=503, detail=str(error)) from error
     updated_request = storage.update_request(request_id, agent_result.request)
 
-    summary = f"Updated request: {updated_request.get('title')} ({updated_request.get('status')})."
-    storage.add_message(request_id, "bot", summary)
     if updated_request.get("clarifying_questions"):
         storage.add_message(request_id, "bot", updated_request["clarifying_questions"][0])
+    elif updated_request.get("status") == "submitted":
+        storage.add_message(request_id, "bot", "Submitted ✅ Your request is on the way.")
     else:
         storage.add_message(request_id, "bot", "All required slots are filled.")
 
