@@ -352,12 +352,15 @@ class DialogAgent:
             return normalized
 
         lowered = (user_text or "").lower()
+        normal_markers = ("normal", "standard", "usual", "обычно", "обычный", "стандартно", "нормально")
         low_markers = ("not urgent", "can wait", "whenever possible", "не срочно", "может подождать")
         urgent_markers = ("asap", "immediately", "right now", "emergency", "hazard", "срочно", "авария", "немедленно")
         high_markers = ("high priority", "priority", "important", "важно", "приоритет")
 
         if any(m in lowered for m in high_markers):
             return "high"
+        if any(m in lowered for m in normal_markers):
+            return "normal"
         if any(m in lowered for m in low_markers):
             return "low"
         if "urgent" in lowered and "not urgent" not in lowered:
@@ -367,7 +370,7 @@ class DialogAgent:
         return "unknown"
 
     def _has_explicit_urgency_marker(self, user_text: str) -> bool:
-        return self._sanitize_urgency(None, user_text) in {"low", "high", "urgent"}
+        return self._sanitize_urgency(None, user_text) in {"low", "normal", "high", "urgent"}
 
     def _is_meaningful_problem_text(self, text: str) -> bool:
         normalized = " ".join((text or "").lower().split())

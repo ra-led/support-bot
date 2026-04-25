@@ -134,7 +134,6 @@ export default function ChatView() {
     try {
       if (correctionRequestId) {
         const updated = await clarifyRequest(correctionRequestId, text)
-        appendMessage('bot', `Updated request: ${updated.title} (${updated.status}).`)
         if (updated.clarifying_questions?.length) {
           appendMessage('bot', updated.clarifying_questions[0])
           setPendingRequest({
@@ -159,7 +158,6 @@ export default function ChatView() {
         return
       }
 
-      appendMessage('bot', `Drafted: ${request.title} (urgency: ${request.urgency || 'unknown'}).`)
       if (request.clarifying_questions?.length) {
         appendMessage('bot', request.clarifying_questions[0])
         setPendingRequest({
@@ -203,7 +201,6 @@ export default function ChatView() {
 
     try {
       const updated = await clarifyRequest(pendingRequest.request_id, text)
-      appendMessage('bot', `Updated request: ${updated.title} (${updated.status}).`)
       if (updated.clarifying_questions?.length) {
         appendMessage('bot', updated.clarifying_questions[0])
         setPendingRequest({
