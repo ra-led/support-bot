@@ -417,6 +417,7 @@ class DialogAgent:
     def _guard_unknown_updates(self, previous_request: Dict[str, Any], request: Dict[str, Any], dialog_state: Dict[str, Any]) -> None:
         mentions = dialog_state.get("slot_mentioned") if isinstance(dialog_state.get("slot_mentioned"), dict) else {}
         asked = set(dialog_state.get("last_asked_slots") or [])
+        problem_confirmed = bool((dialog_state.get("problem") or {}).get("confirmed"))
 
         if (request.get("urgency") or "").strip().lower() in {"unknown", "unknow"} and not (mentions.get("urgency") or "urgency" in asked):
             request["urgency"] = previous_request.get("urgency")
@@ -432,7 +433,8 @@ class DialogAgent:
         previous_taxonomy = previous_request.get("taxonomy") if isinstance(previous_request.get("taxonomy"), dict) else {}
         for slot, key in (("facilities_area", "facilities_area"), ("impacted_service", "impacted_service")):
             value = (self._clean_value(current_taxonomy.get(key)) or "").lower()
-            if value in {"unknown", "unknow"} and not (mentions.get(slot) or slot in asked):
+            # Keep inferred unknown taxonomy when a concrete problem is already confirmed.
+            if value in {"unknown", "unknow"} and not (mentions.get(slot) or slot in asked or problem_confirmed):
                 current_taxonomy[key] = previous_taxonomy.get(key)
         request["taxonomy"] = current_taxonomy
 
@@ -467,6 +469,8 @@ class DialogAgent:
     def _should_take_user_text_as_problem(self, dialog_state: Dict[str, Any], request: Dict[str, Any], user_text: str) -> bool:
         if not self._is_meaningful_problem_text(user_text):
             return False
+        if self._is_urgency_only_phrase(user_text):
+            return False
         lowered = user_text.lower()
         unknown_markers = ("не знаю", "не могу уточнить", "нет данных", "don't know", "can't provide", "not sure")
         if any(marker in lowered for marker in unknown_markers):
@@ -481,9 +485,15 @@ class DialogAgent:
             return False
         if self._has_specific_location_detail(request.get("location") or {}):
             return False
-        if self._has_explicit_urgency_marker(user_text):
-            return False
         return True
+
+    def _is_urgency_only_phrase(self, text: str) -> bool:
+        words = [w for w in (text or "").strip().lower().split() if w]
+        if not words:
+            return False
+        if len(words) > 4:
+            return False
+        return self._has_explicit_urgency_marker(text)
 
     def _is_meaningful_problem_text(self, text: str) -> bool:
         normalized = " ".join((text or "").lower().split())
