@@ -125,6 +125,7 @@ class DialogAgent:
         self._merge_simple_field(request, extraction, "title")
         self._merge_simple_field(request, extraction, "description")
         self._merge_simple_field(request, extraction, "urgency")
+        request["urgency"] = self._sanitize_urgency(request.get("urgency"), state["user_text"])
 
         request["location"] = self._merge_nested(
             request.get("location"),
@@ -463,7 +464,11 @@ class DialogAgent:
         if room and not self._is_generic_location_text(room):
             return True
         free_text = (self._clean_value(location.get("free_text")) or "").lower()
-        return bool(free_text and not self._is_generic_location_text(free_text))
+        return bool(
+            free_text
+            and not self._is_generic_location_text(free_text)
+            and self._is_specific_location_phrase(free_text)
+        )
 
     def _is_generic_location_text(self, value: str) -> bool:
         generic_markers = (
@@ -502,6 +507,73 @@ class DialogAgent:
         if normalized.startswith("facility request"):
             return False
         return True
+
+    def _sanitize_urgency(self, urgency: Any, user_text: str) -> str:
+        normalized_urgency = (self._clean_value(urgency) or "unknown").lower()
+        if normalized_urgency not in {"low", "normal", "high", "urgent", "unknown"}:
+            normalized_urgency = "unknown"
+
+        lowered = (user_text or "").lower()
+        urgent_markers = (
+            "urgent",
+            "asap",
+            "immediately",
+            "right now",
+            "emergency",
+            "people trapped",
+            "hazard",
+            "срочно",
+            "авария",
+            "немедленно",
+            "прямо сейчас",
+        )
+        low_markers = (
+            "not urgent",
+            "can wait",
+            "whenever possible",
+            "не срочно",
+            "может подождать",
+        )
+
+        if any(marker in lowered for marker in urgent_markers):
+            return "urgent"
+        if any(marker in lowered for marker in low_markers):
+            return "low"
+        return "unknown"
+
+    def _is_specific_location_phrase(self, text: str) -> bool:
+        cues = (
+            "room",
+            "cabinet",
+            "floor",
+            "level",
+            "building",
+            "block",
+            "branch",
+            "site",
+            "wing",
+            "corridor",
+            "reception",
+            "lobby",
+            "entrance",
+            "toilet",
+            "bathroom",
+            "kitchen",
+            "warehouse",
+            "office",
+            "кабинет",
+            "этаж",
+            "здание",
+            "корпус",
+            "офис",
+            "склад",
+            "ресепшн",
+            "вход",
+            "туалет",
+            "кухня",
+            "коридор",
+        )
+        return any(cue in text for cue in cues)
 
 
 dialog_agent = DialogAgent()
