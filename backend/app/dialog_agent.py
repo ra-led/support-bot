@@ -199,7 +199,7 @@ class DialogAgent:
         request = state["request"]
         dialog_state = request["dialog_state"]
         ask_slots = state.get("working", {}).get("ask_slots", [])
-        message = state.get("working", {}).get("message") or "Уточните, пожалуйста, детали."
+        message = state.get("working", {}).get("message") or "Please clarify the details."
 
         for slot in ask_slots:
             dialog_state["slot_attempts"][slot] = dialog_state["slot_attempts"].get(slot, 0) + 1
@@ -282,16 +282,16 @@ class DialogAgent:
 
     def _slot_question(self, slot: str) -> str:
         if slot == "problem":
-            return "Опишите, пожалуйста, что именно сломано/что нужно исправить."
+            return "Please describe what is broken or what needs to be fixed."
         if slot == "location":
-            return "Уточните локацию: building/этаж/комната или другой конкретный ориентир."
+            return "Please clarify the location: building/floor/room or another specific landmark."
         if slot == "facilities_area":
-            return "Уточните тип проблемы (например: электрика, сантехника, доступ)."
+            return "Please clarify the issue type (for example: electrical, plumbing, access)."
         if slot == "impacted_service":
-            return "Уточните, что именно затронуто (например: дверь, туалет, кондиционер)."
+            return "Please clarify what is affected (for example: door, toilet, air conditioning)."
         if slot == "urgency":
-            return "Насколько срочно это нужно решить?"
-        return "Уточните, пожалуйста, детали."
+            return "How urgent is this?"
+        return "Please clarify the details."
 
     def _slot_status(self, is_filled: bool, previous_status: Optional[str]) -> str:
         if previous_status == "unknown":
