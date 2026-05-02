@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 router = APIRouter()
-ACTIVE_REQUEST_STATUSES = {"needs_clarification", "ready"}
+ACTIVE_REQUEST_STATUSES = {"needs_clarification"}
 
 
 def _is_request_active(request: Dict[str, Any]) -> bool:

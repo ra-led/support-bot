@@ -167,9 +167,9 @@ class DialogAgent:
             dialog_state.get("phase"),
             user_text,
         )
-        logger.info("[dialog][trace] history:\n%s", conversation_history or "<empty>")
-        logger.info("[dialog][trace] target_slots(before)=%s", dialog_state.get("target_slots"))
-        logger.info("[dialog][trace] slot_mentioned(before)=%s", dialog_state.get("slot_mentioned"))
+        logger.warning("[dialog][trace] history:\n%s", conversation_history or "<empty>")
+        logger.warning("[dialog][trace] target_slots(before)=%s", dialog_state.get("target_slots"))
+        logger.warning("[dialog][trace] slot_mentioned(before)=%s", dialog_state.get("slot_mentioned"))
 
         # Skip already mentioned / exhausted slots
         target_slots = dialog_state.get("target_slots") if isinstance(dialog_state.get("target_slots"), list) else []
@@ -198,8 +198,8 @@ class DialogAgent:
 
         target_slots = [slot for i, slot in enumerate(target_slots) if i not in drop]
         dialog_state["target_slots"] = target_slots
-        logger.info("[dialog][trace] target_slots(after-filter)=%s", target_slots)
-        logger.info("[dialog][trace] slot_mentioned(after-filter)=%s", dialog_state.get("slot_mentioned"))
+        logger.warning("[dialog][trace] target_slots(after-filter)=%s", target_slots)
+        logger.warning("[dialog][trace] slot_mentioned(after-filter)=%s", dialog_state.get("slot_mentioned"))
 
         if target_slots:
             slot = target_slots[0]
