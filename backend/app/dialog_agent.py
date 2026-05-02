@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 CONVERSATION_SLOTS: List[Dict[str, Any]] = [
@@ -291,13 +294,14 @@ class DialogAgent:
                     "type": "json_schema",
                     "json_schema": schema,
                 },
-                "plugins": [{"id": "response-healing"}],
                 "temperature": temperature,
                 "max_completion_tokens": max_tokens,
-                "provider": {"require_parameters": True},
+                "reasoning": {"enabled": False},
             },
             timeout=60,
         )
+        if not response.ok:
+            logger.error("OpenRouter error response: %s", response.text)
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
         return json.loads(content)
