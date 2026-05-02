@@ -123,6 +123,22 @@ export default function ChatView() {
     setActionMessageId(id)
   }
 
+  const handleRequestState = (request: RequestSummary) => {
+    if (request.clarifying_questions?.length) {
+      appendMessage('bot', request.clarifying_questions[0])
+    }
+    if (request.status === 'ready') {
+      appendActionButtons(request.request_id)
+      setPendingRequest(null)
+      return
+    }
+    if (request.clarifying_questions?.length) {
+      setPendingRequest(request)
+    } else {
+      setPendingRequest(null)
+    }
+  }
+
   const handleSend = async () => {
     if (!input.trim() || isSending) return
     setErrorMessage(null)
@@ -134,19 +150,13 @@ export default function ChatView() {
     try {
       if (correctionRequestId) {
         const updated = await clarifyRequest(correctionRequestId, text)
-        if (updated.clarifying_questions?.length) {
-          appendMessage('bot', updated.clarifying_questions[0])
-          setPendingRequest({
-            request_id: updated.request_id,
-            title: updated.title,
-            urgency: updated.urgency,
-            status: updated.status,
-            clarifying_questions: updated.clarifying_questions
-          })
-        } else {
-          appendMessage('bot', 'Thanks, update applied.')
-          appendActionButtons(updated.request_id)
-        }
+        handleRequestState({
+          request_id: updated.request_id,
+          title: updated.title,
+          urgency: updated.urgency,
+          status: updated.status,
+          clarifying_questions: updated.clarifying_questions
+        })
         setCorrectionRequestId(null)
         return
       }
@@ -158,20 +168,13 @@ export default function ChatView() {
         return
       }
 
-      if (request.clarifying_questions?.length) {
-        appendMessage('bot', request.clarifying_questions[0])
-        setPendingRequest({
-          request_id: request.request_id,
-          title: request.title,
-          urgency: request.urgency,
-          status: request.status,
-          clarifying_questions: request.clarifying_questions
-        })
-      } else {
-        appendMessage('bot', 'All required slots are filled.')
-        appendActionButtons(request.request_id)
-        setPendingRequest(null)
-      }
+      handleRequestState({
+        request_id: request.request_id,
+        title: request.title,
+        urgency: request.urgency,
+        status: request.status,
+        clarifying_questions: request.clarifying_questions
+      })
 
       setRequestList((prev) => [
         {
@@ -201,20 +204,13 @@ export default function ChatView() {
 
     try {
       const updated = await clarifyRequest(pendingRequest.request_id, text)
-      if (updated.clarifying_questions?.length) {
-        appendMessage('bot', updated.clarifying_questions[0])
-        setPendingRequest({
-          request_id: updated.request_id,
-          title: updated.title,
-          urgency: updated.urgency,
-          status: updated.status,
-          clarifying_questions: updated.clarifying_questions
-        })
-      } else {
-        appendMessage('bot', 'All required slots are filled.')
-        appendActionButtons(updated.request_id)
-        setPendingRequest(null)
-      }
+      handleRequestState({
+        request_id: updated.request_id,
+        title: updated.title,
+        urgency: updated.urgency,
+        status: updated.status,
+        clarifying_questions: updated.clarifying_questions
+      })
     } catch {
       setErrorMessage('Failed to update request. Please try again.')
     } finally {

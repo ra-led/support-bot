@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 
 CONVERSATION_SLOTS: List[Dict[str, Any]] = [
     {
-        "name": "urgency",
-        "description": "Urgency: how quickly this issue/request should be resolved",
-        "budget": 1,
+        "name": "issue",
+        "description": "Core issue/request details; ensure user has clearly stated the problem",
+        "budget": 2,
     },
     {
         "name": "location",
@@ -24,9 +24,9 @@ CONVERSATION_SLOTS: List[Dict[str, Any]] = [
         "budget": 2,
     },
     {
-        "name": "issue",
-        "description": "Core issue/request details; ensure user has clearly stated the problem",
-        "budget": 2,
+        "name": "urgency",
+        "description": "Urgency: how quickly this issue/request should be resolved",
+        "budget": 1,
     },
 ]
 
