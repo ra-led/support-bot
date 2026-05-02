@@ -278,34 +278,46 @@ class DialogAgent:
 
     def _openrouter_call(self, prompt: str, schema: Dict[str, Any], temperature: float = 0.3, max_tokens: int = 1000) -> Dict[str, Any]:
         endpoint = self.base_url.rstrip("/")
+        candidates: List[str] = []
         if endpoint.endswith("/chat/completions"):
-            url = endpoint
+            candidates.append(endpoint)
         else:
-            url = f"{endpoint}/chat/completions"
+            candidates.append(f"{endpoint}/chat/completions")
+            # OpenRouter canonical fallback (handles misconfigured OPENAI_BASE_URL values)
+            if "openrouter.ai" in endpoint:
+                candidates.append("https://openrouter.ai/api/v1/chat/completions")
 
-        response = requests.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
+        payload = {
+            "model": self.model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": schema,
             },
-            json={
-                "model": self.model_name,
-                "messages": [{"role": "user", "content": prompt}],
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": schema,
-                },
-                "plugins": [{"id": "response-healing"}],
-                "temperature": temperature,
-                "max_completion_tokens": max_tokens,
-                "provider": {"require_parameters": True},
-            },
-            timeout=60,
-        )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-        return json.loads(content)
+            "plugins": [{"id": "response-healing"}],
+            "temperature": temperature,
+            "max_completion_tokens": max_tokens,
+            "provider": {"require_parameters": True},
+            "reasoning": {"enabled": False},
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        last_error: Exception | None = None
+        for url in candidates:
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            if response.status_code == 404:
+                last_error = requests.HTTPError(f"404 for {url}", response=response)
+                continue
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            return json.loads(content)
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("OpenRouter call failed without response")
 
     def _history_to_text(self, history: List[Dict[str, Any]]) -> str:
         if not history:
