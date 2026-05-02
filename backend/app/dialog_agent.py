@@ -291,7 +291,12 @@ class DialogAgent:
         req["status"] = "ready"
         req["missing_required_fields"] = []
         req["clarifying_questions"] = [
-            "I drafted your request from our conversation. If everything looks good, use the Submit button to send it."
+            (
+                "Thanks, I have enough details.\n\n"
+                f"Title: {title}\n"
+                f"Details: {description}\n\n"
+                "Shall we submit it?"
+            )
         ]
         return AgentResult(request=req)
 
