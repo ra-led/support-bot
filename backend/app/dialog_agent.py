@@ -162,14 +162,10 @@ class DialogAgent:
 
         conversation_history = self._history_to_text(history)
         logger.info(
-            "[dialog][trace] run_turn request_id=%s phase=%s user_text=%r",
             req.get("request_id"),
             dialog_state.get("phase"),
             user_text,
         )
-        logger.warning("[dialog][trace] history:\n%s", conversation_history or "<empty>")
-        logger.warning("[dialog][trace] target_slots(before)=%s", dialog_state.get("target_slots"))
-        logger.warning("[dialog][trace] slot_mentioned(before)=%s", dialog_state.get("slot_mentioned"))
 
         # Skip already mentioned / exhausted slots
         target_slots = dialog_state.get("target_slots") if isinstance(dialog_state.get("target_slots"), list) else []
@@ -186,7 +182,6 @@ class DialogAgent:
             mentioned = bool(response.get("mentioned"))
             dialog_state["slot_last_supervisor"][slot["name"]] = mentioned
             logger.info(
-                "[dialog][trace] supervisor slot=%s mentioned=%s budget=%s",
                 slot.get("name"),
                 mentioned,
                 slot.get("budget"),
@@ -198,8 +193,6 @@ class DialogAgent:
 
         target_slots = [slot for i, slot in enumerate(target_slots) if i not in drop]
         dialog_state["target_slots"] = target_slots
-        logger.warning("[dialog][trace] target_slots(after-filter)=%s", target_slots)
-        logger.warning("[dialog][trace] slot_mentioned(after-filter)=%s", dialog_state.get("slot_mentioned"))
 
         if target_slots:
             slot = target_slots[0]
@@ -220,7 +213,6 @@ class DialogAgent:
             req["status"] = "needs_clarification"
             req["missing_required_fields"] = [slot.get("name") for slot in target_slots if int(slot.get("budget", 0)) > 0]
             logger.info(
-                "[dialog][trace] ask-next slot=%s budget_now=%s status=%s question=%r",
                 slot.get("name"),
                 target_slots[0].get("budget"),
                 req.get("status"),
@@ -301,25 +293,23 @@ class DialogAgent:
         req["clarifying_questions"] = [
             "I drafted your request from our conversation. If everything looks good, use the Submit button to send it."
         ]
-        logger.info(
-            "[dialog][trace] finalize-ready request_id=%s title=%r urgency=%r taxonomy=%s location=%s",
-            req.get("request_id"),
-            req.get("title"),
-            req.get("urgency"),
-            req.get("taxonomy"),
-            req.get("location"),
-        )
         return AgentResult(request=req)
 
     def _openrouter_call(self, prompt: str, schema: Dict[str, Any], temperature: float = 0.3, max_tokens: int = 1000) -> Dict[str, Any]:
         messages = [{"role": "user", "content": prompt}]
-        logger.info(
-            "[openrouter][trace] request model=%s temperature=%s max_completion_tokens=%s schema=%s prompt=%r",
-            self.model_name,
-            temperature,
-            max_tokens,
-            schema.get("name"),
-            prompt,
+        logger.warning(
+            "[openrouter][trace] request payload=%s",
+            {
+                "model": self.model_name,
+                "messages": messages,
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": schema,
+                },
+                "temperature": temperature,
+                "max_completion_tokens": max_tokens,
+                "reasoning": {"enabled": False},
+            },
         )
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -344,7 +334,7 @@ class DialogAgent:
             response_json = response.json()
         except Exception:
             response_json = None
-        logger.info(
+        logger.warning(
             "[openrouter][trace] response status=%s json=%s text=%s",
             response.status_code,
             response_json,
