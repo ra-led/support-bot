@@ -57,6 +57,20 @@ interface TaxonomyFacilityArea {
   impacted_services?: TaxonomyImpactedService[]
 }
 
+const getRequestTypeLabel = (taxonomy: TaxonomyFacilityArea[], requestTypeId?: string | null) => {
+  if (!requestTypeId) return null
+  for (const area of taxonomy) {
+    for (const service of area.impacted_services || []) {
+      for (const requestType of service.request_types || []) {
+        if (requestType.id === requestTypeId) {
+          return requestType.label || requestType.id || null
+        }
+      }
+    }
+  }
+  return null
+}
+
 const prettyJson = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`
 
 const parseTaxonomyJson = (text: string): { value: TaxonomyFacilityArea[] | null; error: string | null } => {
@@ -390,14 +404,12 @@ export default function AdminView() {
             requests.map((request) => (
               <article key={request.request_id} className="request-card">
                 <div className="request-header">
-                  <strong>{request.title}</strong>
-                  <span className={`status-pill status-${request.status}`}>{request.status}</span>
+                  <strong>
+                    {(request.reporter_email || 'Unknown') + ' | ' + (request.title || 'Untitled request')}
+                  </strong>
                 </div>
                 <p className="muted">{request.description}</p>
                 <div className="request-meta">
-                  <span>
-                    <strong>Urgency:</strong> {request.urgency}
-                  </span>
                   <span>
                     <strong>Location:</strong>{' '}
                     {request.location?.room ||
@@ -409,41 +421,25 @@ export default function AdminView() {
                 </div>
                 <div className="request-meta">
                   <span>
+                    <strong>Type:</strong>{' '}
+                    {(() => {
+                      const typeId = request.taxonomy?.request_type || null
+                      const typeLabel = getRequestTypeLabel(taxonomyPreview, typeId)
+                      if (!typeId) return 'Unknown'
+                      return `${typeLabel || 'Unknown'} (${typeId})`
+                    })()}
+                  </span>
+                </div>
+                <div className="request-meta">
+                  <span>
+                    <strong>Urgency:</strong> {request.urgency || 'unknown'}
+                  </span>
+                </div>
+                <div className="request-meta">
+                  <span>
                     <strong>Dialog ID:</strong> {request.dialog_id || request.request_id}
                   </span>
                 </div>
-                <div className="request-meta">
-                  <span>
-                    <strong>Email:</strong> {request.reporter_email || 'Unknown'}
-                  </span>
-                </div>
-                <div className="request-meta">
-                  <span>
-                    <strong>Facilities:</strong> {request.taxonomy?.facilities_area || 'Unknown'}
-                  </span>
-                  <span>
-                    <strong>Service:</strong> {request.taxonomy?.impacted_service || 'Unknown'}
-                  </span>
-                </div>
-                <div className="request-meta">
-                  <span>
-                    <strong>Type:</strong> {request.taxonomy?.request_type || 'Unknown'}
-                  </span>
-                </div>
-                {request.missing_required_fields?.length ? (
-                  <div className="request-meta">
-                    <span>
-                      <strong>Missing:</strong> {request.missing_required_fields.join(', ')}
-                    </span>
-                  </div>
-                ) : null}
-                {request.clarifying_questions?.length ? (
-                  <div className="request-meta">
-                    <span>
-                      <strong>Next question:</strong> {request.clarifying_questions[0]}
-                    </span>
-                  </div>
-                ) : null}
                 <div className="request-meta">
                   <button
                     type="button"
