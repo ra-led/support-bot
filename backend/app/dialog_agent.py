@@ -46,10 +46,7 @@ or
 '''.strip()
 
 LOCATION_PARSE_PROMPT = '''
-{conversation_history}
----
-
-From the conversation above, determine the request location if possible.
+Determine the request location from the conversation history.
 Return structured fields (if missing, use "unknown"):
 - building
 - floor
@@ -58,7 +55,7 @@ Return structured fields (if missing, use "unknown"):
 Also provide free_text with only the location phrase from the dialogue.
 If location is not mentioned, return "unknown".
 
-Return strict JSON, e.g.
+Return strict JSON. For example:
 {{"building": "723 Swanston Street", "floor": "2", "room": "MSPC team office", "free_text": "MSPC team office on level 2, 723 Swanston Street"}}
 or
 {{"building": "unknown", "floor": "unknown", "room": "8", "free_text": "room 8"}}
@@ -66,47 +63,61 @@ or
 {{"building": "unknown", "floor": "unknown", "room": "women toilet", "free_text": "women toilet"}}
 or
 {{"building": "unknown", "floor": "unknown", "room": "unknown", "free_text": "unknown"}}
+
+<<<CONVERSATION_HISTORY
+{conversation_history}
+CONVERSATION_HISTORY>>>
 '''.strip()
 
 ISSUE_SUMMARY_PROMPT = '''
-{conversation_history}
----
-From the conversation above, produce:
+Produce from the conversation history:
 - title: shortest clear issue label
 - details: as complete issue/request summary as possible
 
-Return strict JSON:
+Return strict JSON. For example:
 {{"title": "Very short issue label", "details": "Detailed issue/request summary from conversation"}}
+
+<<<CONVERSATION_HISTORY
+{conversation_history}
+CONVERSATION_HISTORY>>>
 '''.strip()
 
 URGENCY_CLF_PROMPT = '''
-{conversation_history}
----
-Classify urgency from the full conversation.
+Classify urgency from the full conversation history.
 Use:
 - low: no urgency / can wait
 - normal: standard priority
 - high: needs to be resolved as soon as possible
 - unknown: cannot determine from conversation
 
-Return strict JSON, e.g.
+Return strict JSON with one of these values:
 {{"result": "low"}}
+or
+{{"result": "normal"}}
+or
+{{"result": "high"}}
+or
+{{"result": "unknown"}}
+
+<<<CONVERSATION_HISTORY
+{conversation_history}
+CONVERSATION_HISTORY>>>
 '''.strip()
 
 SAFETY_OR_ACCESS_CLF_PROMPT = '''
-{conversation_history}
----
-Determine whether the issue affects safety or access.
+Determine whether the issue affects safety or access from the conversation history.
 
 Return strict JSON:
 {{"result": true}}
 or
 {{"result": false}}
+
+<<<CONVERSATION_HISTORY
+{conversation_history}
+CONVERSATION_HISTORY>>>
 '''.strip()
 
 ASSISTENT_PROMPT = '''
-{conversation_history}
----
 You are analyzing the correspondence for the slot filling task.
 Find out if the following slot was mentioned:
 
@@ -119,13 +130,15 @@ Find out if the following slot was mentioned:
 If it is not clear yet, ask one concise follow-up question that helps fill this slot.
 
 Write one assistant message to the user.
-Return only JSON:
+Return only JSON. For example:
 {{"response": "Assistant message text"}}
+
+<<<CONVERSATION_HISTORY
+{conversation_history}
+CONVERSATION_HISTORY>>>
 '''.strip()
 
 SUPERVISOR_PROMPT = '''
-{conversation_history}
----
 You are analyzing the correspondence for the slot filling task.
 Find out if the following slot was mentioned:
 
@@ -137,8 +150,14 @@ Find out if the following slot was mentioned:
 
 If user provided direct/indirect info about the slot -> mentioned = True.
 
-Return strict JSON:
+Return strict JSON. For example:
 {{"mentioned": true}}
+or
+{{"mentioned": false}}
+
+<<<CONVERSATION_HISTORY
+{conversation_history}
+CONVERSATION_HISTORY>>>
 '''.strip()
 
 
