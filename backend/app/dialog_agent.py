@@ -14,18 +14,18 @@ logger = logging.getLogger(__name__)
 
 CONVERSATION_SLOTS: List[Dict[str, Any]] = [
     {
-        "name": "issue",
-        "description": "Core issue/request details; ensure user has clearly stated the problem",
+        "name": "Issue details",
+        "description": "Core issue or request details. Confirm what happened, what is wrong, and any important context.",
         "budget": 2,
     },
     {
-        "name": "location",
-        "description": "Location related to the issue/request (preferably building, floor, room)",
+        "name": "Location",
+        "description": "Where the issue/request is located. Prefer building, floor, room, or another precise locator.",
         "budget": 2,
     },
     {
-        "name": "urgency",
-        "description": "Urgency: how quickly this issue/request should be resolved",
+        "name": "Urgency",
+        "description": "How urgent this is and how quickly it should be handled.",
         "budget": 1,
     },
 ]
@@ -109,8 +109,16 @@ or
 ASSISTENT_PROMPT = '''
 {conversation_history}
 ---
-Above is a support conversation history for facility requests.
-Your goal is to clarify {slot_name} - {slot_description}.
+You are analyzing the correspondence for the slot filling task.
+Find out if the following slot was mentioned:
+
+# Slot name
+{slot_name}
+
+# Slot description
+{slot_description}
+
+If it is not clear yet, ask one concise follow-up question that helps fill this slot.
 
 Write one assistant message to the user.
 Return only JSON:
@@ -120,11 +128,16 @@ Return only JSON:
 SUPERVISOR_PROMPT = '''
 {conversation_history}
 ---
-Above is the support conversation history.
-Check whether {slot_name} - {slot_description} was mentioned in the conversation.
+You are analyzing the correspondence for the slot filling task.
+Find out if the following slot was mentioned:
+
+# Slot name
+{slot_name}
+
+# Slot description
+{slot_description}
 
 If user provided direct/indirect info about the slot -> mentioned = True.
-If assistant asked about the slot, but user could not answer / ignored / partially answered -> also mentioned = True.
 
 Return strict JSON:
 {{"mentioned": true}}
