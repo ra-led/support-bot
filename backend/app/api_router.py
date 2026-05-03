@@ -320,6 +320,19 @@ async def admin_stats(x_admin_password: Optional[str] = Header(default=None)) ->
     return {"total_requests": len(requests), "by_status": by_status}
 
 
+@router.get("/v1/admin/traces/{dialog_id}")
+async def admin_get_dialog_traces(
+    dialog_id: str,
+    x_admin_password: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    assert_admin_password(x_admin_password)
+    request = storage.get_request(dialog_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Dialog not found")
+    traces = storage.list_llm_traces(dialog_id)
+    return {"dialog_id": dialog_id, "request": request, "traces": traces}
+
+
 @router.get("/v1/admin/export/issues.xlsx")
 async def export_issues_xlsx(
     x_admin_password: Optional[str] = Header(default=None),

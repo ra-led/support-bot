@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import ChatView from './components/ChatView'
 import AdminView from './components/AdminView'
+import DeepTraceView from './components/DeepTraceView'
 
 export default function App() {
   const location = useLocation()
@@ -28,6 +29,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<ChatView />} />
           <Route path="/admin" element={<AdminView />} />
+          <Route path="/deep" element={<DeepTraceView />} />
         </Routes>
       </main>
     </div>

@@ -18,6 +18,7 @@ interface StatsResponse {
 
 interface RequestItem {
   request_id: string
+  dialog_id?: string
   title: string
   description: string
   urgency: string
@@ -404,6 +405,11 @@ export default function AdminView() {
                       request.location?.building ||
                       request.location?.free_text ||
                       'Unknown'}
+                  </span>
+                </div>
+                <div className="request-meta">
+                  <span>
+                    <strong>Dialog ID:</strong> {request.dialog_id || request.request_id}
                   </span>
                 </div>
                 <div className="request-meta">

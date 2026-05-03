@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import copy
 import json
-import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
 import requests
 
-logger = logging.getLogger(__name__)
-
+from .storage import storage
 
 CONVERSATION_SLOTS: List[Dict[str, Any]] = [
     {
@@ -174,17 +172,13 @@ class DialogAgent:
         req["dialog_state"] = dialog_state
 
         conversation_history = self._history_to_text(history)
-        logger.info(
-            req.get("request_id"),
-            dialog_state.get("phase"),
-            user_text,
-        )
 
         # Skip already mentioned / exhausted slots
         target_slots = dialog_state.get("target_slots") if isinstance(dialog_state.get("target_slots"), list) else []
         drop: List[int] = []
         for i, slot in enumerate(target_slots):
             response = self._openrouter_call(
+                request_id=str(req.get("request_id") or ""),
                 prompt=SUPERVISOR_PROMPT.format(
                     conversation_history=conversation_history,
                     slot_name=slot["name"],
@@ -194,11 +188,6 @@ class DialogAgent:
             )
             mentioned = bool(response.get("mentioned"))
             dialog_state["slot_last_supervisor"][slot["name"]] = mentioned
-            logger.info(
-                slot.get("name"),
-                mentioned,
-                slot.get("budget"),
-            )
             if mentioned:
                 dialog_state["slot_mentioned"][slot["name"]] = True
             if mentioned or int(slot.get("budget", 0)) <= 0:
@@ -210,6 +199,7 @@ class DialogAgent:
         if target_slots:
             slot = target_slots[0]
             response = self._openrouter_call(
+                request_id=str(req.get("request_id") or ""),
                 prompt=ASSISTENT_PROMPT.format(
                     conversation_history=conversation_history,
                     slot_name=slot["name"],
@@ -225,16 +215,11 @@ class DialogAgent:
             req["clarifying_questions"] = [text]
             req["status"] = "needs_clarification"
             req["missing_required_fields"] = [slot.get("name") for slot in target_slots if int(slot.get("budget", 0)) > 0]
-            logger.info(
-                slot.get("name"),
-                target_slots[0].get("budget"),
-                req.get("status"),
-                text,
-            )
             return AgentResult(request=req)
 
         # Parse after all slots were discussed
         issue = self._openrouter_call(
+            request_id=str(req.get("request_id") or ""),
             prompt=ISSUE_SUMMARY_PROMPT.format(conversation_history=conversation_history),
             schema=self._issue_response_schema(),
         )
@@ -243,6 +228,7 @@ class DialogAgent:
 
         taxonomy_inject = json.dumps(taxonomy, ensure_ascii=False)
         facility = self._openrouter_call(
+            request_id=str(req.get("request_id") or ""),
             prompt=FACILITY_CLF_PROMPT.format(
                 taxonomy=taxonomy_inject,
                 title=title,
@@ -259,11 +245,13 @@ class DialogAgent:
             facilities_area, impacted_service = self._get_request_roots(request_type, taxonomy)
 
         location = self._openrouter_call(
+            request_id=str(req.get("request_id") or ""),
             prompt=LOCATION_PARSE_PROMPT.format(conversation_history=conversation_history),
             schema=self._location_response_schema(),
         )
 
         urgency = self._openrouter_call(
+            request_id=str(req.get("request_id") or ""),
             prompt=URGENCY_CLF_PROMPT.format(conversation_history=conversation_history),
             schema=self._urgency_response_schema(),
         )
@@ -272,6 +260,7 @@ class DialogAgent:
             urgency_value = "unknown"
 
         safety_or_access = self._openrouter_call(
+            request_id=str(req.get("request_id") or ""),
             prompt=SAFETY_OR_ACCESS_CLF_PROMPT.format(conversation_history=conversation_history),
             schema=self._safety_or_access_response_schema(),
         )
@@ -313,22 +302,15 @@ class DialogAgent:
         ]
         return AgentResult(request=req)
 
-    def _openrouter_call(self, prompt: str, schema: Dict[str, Any], temperature: float = 0.3, max_tokens: int = 1000) -> Dict[str, Any]:
+    def _openrouter_call(
+        self,
+        request_id: str,
+        prompt: str,
+        schema: Dict[str, Any],
+        temperature: float = 0.3,
+        max_tokens: int = 1000,
+    ) -> Dict[str, Any]:
         messages = [{"role": "user", "content": prompt}]
-        logger.warning(
-            "[openrouter][trace] request payload=%s",
-            {
-                "model": self.model_name,
-                "messages": messages,
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": schema,
-                },
-                "temperature": temperature,
-                "max_completion_tokens": max_tokens,
-                "reasoning": {"enabled": False},
-            },
-        )
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -348,20 +330,16 @@ class DialogAgent:
             },
             timeout=60,
         )
-        try:
-            response_json = response.json()
-        except Exception:
-            response_json = None
-        logger.warning(
-            "[openrouter][trace] response status=%s json=%s text=%s",
-            response.status_code,
-            response_json,
-            response.text,
+        schema_name = str(schema.get("name") or "unknown")
+        storage.add_llm_trace(
+            request_id=request_id,
+            model=self.model_name,
+            schema_name=schema_name,
+            prompt=prompt,
+            response_text=response.text,
         )
-        if not response.ok:
-            logger.error("OpenRouter error response: %s", response.text)
         response.raise_for_status()
-        content = (response_json or response.json())["choices"][0]["message"]["content"]
+        content = response.json()["choices"][0]["message"]["content"]
         return json.loads(content)
 
     def _history_to_text(self, history: List[Dict[str, Any]]) -> str:

@@ -259,6 +259,52 @@ a {
   overflow: hidden;
 }
 
+.deep-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.deep-panel {
+  padding: 16px;
+}
+
+.deep-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.deep-form .text-input {
+  flex: 1;
+}
+
+.deep-trace-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.deep-trace-card {
+  border: 1px solid #dce4f0;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fafcff;
+}
+
+.deep-pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid #e3e8f2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+  max-height: 320px;
+  overflow: auto;
+}
+
 .chat-head {
   display: flex;
   align-items: flex-start;

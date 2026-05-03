@@ -238,6 +238,25 @@ export async function downloadIssuesExport() {
   return response.data as Blob
 }
 
+export async function fetchDialogTrace(dialogId: string) {
+  const response = await api.get(`/v1/admin/traces/${dialogId}`, {
+    headers: getAdminHeaders()
+  })
+  return response.data as {
+    dialog_id: string
+    request: Record<string, unknown>
+    traces: Array<{
+      id: number
+      request_id: string
+      model: string
+      schema_name: string
+      prompt: string
+      response_text: string
+      created_at: string
+    }>
+  }
+}
+
 export async function transcribeAudio(audioBlob: Blob, prompt?: string) {
   const originalHeaderHex = await readHeaderHex(audioBlob)
   if (AUDIO_DEBUG) {

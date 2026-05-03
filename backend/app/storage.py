@@ -385,6 +385,19 @@ class Storage:
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS llm_traces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id TEXT,
+                model TEXT,
+                schema_name TEXT,
+                prompt TEXT,
+                response_text TEXT,
+                created_at TEXT
+            )
+            """
+        )
         self.conn.commit()
         self._ensure_column("requests", "dialog_state_json", "TEXT")
 
@@ -570,6 +583,7 @@ class Storage:
     def _row_to_request(self, row: sqlite3.Row) -> Dict[str, Any]:
         return {
             "request_id": row["request_id"],
+            "dialog_id": row["request_id"],
             "tenant_id": row["tenant_id"],
             "branch_id": row["branch_id"],
             "source_message_id": row["source_message_id"],
@@ -629,6 +643,57 @@ class Storage:
             {
                 "sender": row["sender"],
                 "content": row["content"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def add_llm_trace(
+        self,
+        request_id: str,
+        model: str,
+        schema_name: str,
+        prompt: str,
+        response_text: str,
+    ) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO llm_traces (
+                request_id, model, schema_name, prompt, response_text, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                request_id,
+                model,
+                schema_name,
+                prompt,
+                response_text,
+                dt.datetime.utcnow().isoformat(),
+            ),
+        )
+        self.conn.commit()
+
+    def list_llm_traces(self, request_id: str) -> List[Dict[str, Any]]:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, request_id, model, schema_name, prompt, response_text, created_at
+            FROM llm_traces
+            WHERE request_id = ?
+            ORDER BY id ASC
+            """,
+            (request_id,),
+        )
+        rows = cursor.fetchall()
+        return [
+            {
+                "id": row["id"],
+                "request_id": row["request_id"],
+                "model": row["model"],
+                "schema_name": row["schema_name"],
+                "prompt": row["prompt"],
+                "response_text": row["response_text"],
                 "created_at": row["created_at"],
             }
             for row in rows
