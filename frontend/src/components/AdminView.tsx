@@ -76,7 +76,11 @@ const getRequestTypeLabel = (taxonomy: TaxonomyFacilityArea[], requestTypeId?: s
 const VIEWED_ADMIN_DIALOG_IDS_STORAGE_KEY = 'supportBotAdminViewedDialogIds'
 const CREATE_NEW_VALUE = '__create_new__'
 
-const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+const dateFormatter = new Intl.DateTimeFormat('en-AU', {
+  dateStyle: 'medium'
+})
+
+const dateTimeFormatter = new Intl.DateTimeFormat('en-AU', {
   dateStyle: 'medium',
   timeStyle: 'short'
 })
@@ -155,11 +159,23 @@ const getExamples = (values: Array<string | null | undefined>, maxCount = 3) =>
 const buildInputTip = (description: string, examples: string[]) =>
   examples.length > 0 ? `${description}, e.g. ${examples.join(', ')}` : description
 
-const formatDateTime = (value?: string | null) => {
+const parseDateTime = (value?: string | null) => {
   if (!value) return 'Unknown'
   const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(value)
   const parsed = new Date(hasTimezone ? value : `${value}Z`)
   if (Number.isNaN(parsed.getTime())) return 'Unknown'
+  return parsed
+}
+
+const formatDate = (value?: string | null) => {
+  const parsed = parseDateTime(value)
+  if (parsed === 'Unknown') return parsed
+  return dateFormatter.format(parsed)
+}
+
+const formatDateTime = (value?: string | null) => {
+  const parsed = parseDateTime(value)
+  if (parsed === 'Unknown') return parsed
   return dateTimeFormatter.format(parsed)
 }
 
@@ -925,9 +941,12 @@ export default function AdminView() {
                   className={`request-card ${isNewDialog ? 'new-dialog-card' : ''}`}
                 >
                   <div className="request-header">
-                    <strong>
-                      {(request.reporter_email || 'Unknown') + ' | ' + (request.title || 'Untitled request')}
-                    </strong>
+                    <div className="request-title-line">
+                      <strong className="request-title-main">
+                        {(request.reporter_email || 'Unknown') + ' | ' + (request.title || 'Untitled request')}
+                      </strong>
+                      <span className="request-started-date">{formatDate(request.created_at)}</span>
+                    </div>
                     {isNewDialog ? <span className="new-dialog-badge">New</span> : null}
                   </div>
                   <p className="muted">{request.description}</p>
@@ -960,11 +979,6 @@ export default function AdminView() {
                   <div className="request-meta">
                     <span>
                       <strong>Dialog ID:</strong> {request.dialog_id || request.request_id}
-                    </span>
-                  </div>
-                  <div className="request-meta">
-                    <span>
-                      <strong>Started:</strong> {formatDateTime(request.created_at)}
                     </span>
                   </div>
                   <div className="request-meta">
