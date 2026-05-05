@@ -76,6 +76,11 @@ const getRequestTypeLabel = (taxonomy: TaxonomyFacilityArea[], requestTypeId?: s
 const VIEWED_ADMIN_DIALOG_IDS_STORAGE_KEY = 'supportBotAdminViewedDialogIds'
 const CREATE_NEW_VALUE = '__create_new__'
 
+const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short'
+})
+
 interface TaxonomyFormState {
   facilityId: string
   newFacilityId: string
@@ -149,6 +154,14 @@ const getExamples = (values: Array<string | null | undefined>, maxCount = 3) =>
 
 const buildInputTip = (description: string, examples: string[]) =>
   examples.length > 0 ? `${description}, e.g. ${examples.join(', ')}` : description
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return 'Unknown'
+  const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(value)
+  const parsed = new Date(hasTimezone ? value : `${value}Z`)
+  if (Number.isNaN(parsed.getTime())) return 'Unknown'
+  return dateTimeFormatter.format(parsed)
+}
 
 interface DialogViewSnapshot {
   ids: Set<string>
@@ -337,7 +350,7 @@ export default function AdminView() {
   const [activeConversation, setActiveConversation] = useState<{
     requestId: string
     title: string
-    messages: { sender: string; content: string }[]
+    messages: { sender: string; content: string; created_at?: string | null }[]
   } | null>(null)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -950,6 +963,11 @@ export default function AdminView() {
                     </span>
                   </div>
                   <div className="request-meta">
+                    <span>
+                      <strong>Started:</strong> {formatDateTime(request.created_at)}
+                    </span>
+                  </div>
+                  <div className="request-meta">
                     <button
                       type="button"
                       className="btn primary"
@@ -985,7 +1003,10 @@ export default function AdminView() {
                       message.sender === 'user' ? 'from-user' : 'from-bot'
                     }`}
                   >
-                    <strong>{message.sender === 'user' ? 'User' : 'Bot'}:</strong> {message.content}
+                    <div>
+                      <strong>{message.sender === 'user' ? 'User' : 'Bot'}:</strong> {message.content}
+                    </div>
+                    <div className="conversation-timestamp">{formatDateTime(message.created_at)}</div>
                   </div>
                 ))
               )}

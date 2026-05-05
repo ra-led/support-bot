@@ -912,6 +912,12 @@ a {
   font-size: 14px;
 }
 
+.conversation-timestamp {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 11px;
+}
+
 .conversation-line.from-user strong {
   color: #1d4ed8;
 }
