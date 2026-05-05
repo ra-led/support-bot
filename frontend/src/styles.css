@@ -601,6 +601,10 @@ a {
   font: inherit;
 }
 
+.admin-view .text-input::placeholder {
+  font-size: 11px;
+}
+
 .form-label {
   font-size: 13px;
   font-weight: 700;
