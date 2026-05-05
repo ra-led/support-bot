@@ -106,6 +106,50 @@ const emptyTaxonomyForm: TaxonomyFormState = {
   requestTypeLabel: ''
 }
 
+const getDefaultTaxonomyForm = (taxonomy: TaxonomyFacilityArea[]): TaxonomyFormState => {
+  const firstFacility = taxonomy.find((area) => area.id)
+  const firstService = firstFacility?.impacted_services?.find((service) => service.id)
+  return {
+    ...emptyTaxonomyForm,
+    facilityId: firstFacility?.id || CREATE_NEW_VALUE,
+    serviceId: firstFacility ? firstService?.id || CREATE_NEW_VALUE : CREATE_NEW_VALUE
+  }
+}
+
+const normalizeTaxonomyForm = (
+  taxonomy: TaxonomyFacilityArea[],
+  form: TaxonomyFormState
+): TaxonomyFormState => {
+  if (form.facilityId === CREATE_NEW_VALUE) {
+    return { ...form, serviceId: CREATE_NEW_VALUE }
+  }
+
+  const selectedArea = taxonomy.find((area) => area.id === form.facilityId)
+  if (!selectedArea) {
+    return getDefaultTaxonomyForm(taxonomy)
+  }
+
+  const hasSelectedService = (selectedArea.impacted_services || []).some(
+    (service) => service.id === form.serviceId
+  )
+  return {
+    ...form,
+    serviceId:
+      form.serviceId === CREATE_NEW_VALUE || hasSelectedService
+        ? form.serviceId
+        : selectedArea.impacted_services?.find((service) => service.id)?.id || CREATE_NEW_VALUE
+  }
+}
+
+const getExamples = (values: Array<string | null | undefined>, maxCount = 3) =>
+  Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => !!value))).slice(
+    0,
+    maxCount
+  )
+
+const buildInputTip = (description: string, examples: string[]) =>
+  examples.length > 0 ? `${description}, e.g. ${examples.join(', ')}` : description
+
 interface DialogViewSnapshot {
   ids: Set<string>
   hasBaseline: boolean
@@ -331,7 +375,7 @@ export default function AdminView() {
     writeViewedDialogSnapshot(currentDialogIds)
     setTaxonomyPreview(facilitiesAreas)
     setTaxonomyVersion(taxonomyResponse.taxonomy_version ?? null)
-    setTaxonomyForm(emptyTaxonomyForm)
+    setTaxonomyForm(getDefaultTaxonomyForm(facilitiesAreas))
     setTaxonomySaveError(null)
     setTaxonomySaveSuccess(null)
   }
@@ -420,6 +464,43 @@ export default function AdminView() {
     [taxonomyForm.facilityId, taxonomyPreview]
   )
 
+  const selectedService = useMemo(
+    () => selectedFacility?.impacted_services?.find((service) => service.id === taxonomyForm.serviceId) || null,
+    [selectedFacility, taxonomyForm.serviceId]
+  )
+
+  const taxonomyInputTips = useMemo(() => {
+    const allServices = taxonomyPreview.flatMap((area) => area.impacted_services || [])
+    const scopedServices = selectedFacility?.impacted_services?.length
+      ? selectedFacility.impacted_services
+      : allServices
+    const allRequestTypes = allServices.flatMap((service) => service.request_types || [])
+    const scopedRequestTypes = selectedService?.request_types?.length
+      ? selectedService.request_types
+      : allRequestTypes
+
+    return {
+      facilityId: buildInputTip('Stable snake_case area id', getExamples(taxonomyPreview.map((area) => area.id))),
+      facilityLabel: buildInputTip(
+        'Human-readable facility area name',
+        getExamples(taxonomyPreview.map((area) => area.label))
+      ),
+      serviceId: buildInputTip('Stable dot-separated impact service id', getExamples(scopedServices.map((service) => service.id))),
+      serviceLabel: buildInputTip(
+        'Human-readable impact service name',
+        getExamples(scopedServices.map((service) => service.label))
+      ),
+      requestTypeId: buildInputTip(
+        'Stable dot-separated request type id',
+        getExamples(scopedRequestTypes.map((requestType) => requestType.id))
+      ),
+      requestTypeLabel: buildInputTip(
+        'Human-readable request type name',
+        getExamples(scopedRequestTypes.map((requestType) => requestType.label))
+      )
+    }
+  }, [selectedFacility, selectedService, taxonomyPreview])
+
   const persistTaxonomy = async (nextTaxonomy: TaxonomyFacilityArea[], successMessage: string) => {
     setIsSavingTaxonomy(true)
     setTaxonomySaveError(null)
@@ -430,6 +511,7 @@ export default function AdminView() {
         ? (response.facilities_areas as TaxonomyFacilityArea[])
         : []
       setTaxonomyPreview(facilitiesAreas)
+      setTaxonomyForm((current) => normalizeTaxonomyForm(facilitiesAreas, current))
       setTaxonomyVersion(response.taxonomy_version ?? null)
       setTaxonomySaveSuccess(
         response.taxonomy_version
@@ -456,7 +538,7 @@ export default function AdminView() {
 
     const saved = await persistTaxonomy(result.value, 'Request type added.')
     if (saved) {
-      setTaxonomyForm(emptyTaxonomyForm)
+      setTaxonomyForm(getDefaultTaxonomyForm(result.value))
     }
   }
 
@@ -528,6 +610,10 @@ export default function AdminView() {
             <h3>Total requests</h3>
             <p>{stats?.total_requests ?? 0}</p>
           </article>
+          <article className="stat-card new-stat-card">
+            <h3>New</h3>
+            <p>{newDialogIds.size}</p>
+          </article>
           {stats &&
             Object.entries(stats.by_status).map(([status, count]) => (
               <article className="stat-card" key={status}>
@@ -555,15 +641,19 @@ export default function AdminView() {
                 id="taxonomy-facility"
                 className="text-input"
                 value={taxonomyForm.facilityId}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const nextFacilityId = event.target.value
+                  const nextFacility = taxonomyPreview.find((area) => area.id === nextFacilityId)
                   setTaxonomyForm((current) => ({
                     ...current,
-                    facilityId: event.target.value,
-                    serviceId: event.target.value === CREATE_NEW_VALUE ? CREATE_NEW_VALUE : ''
+                    facilityId: nextFacilityId,
+                    serviceId:
+                      nextFacilityId === CREATE_NEW_VALUE
+                        ? CREATE_NEW_VALUE
+                        : nextFacility?.impacted_services?.find((service) => service.id)?.id || CREATE_NEW_VALUE
                   }))
-                }
+                }}
               >
-                <option value="">Choose facility</option>
                 {taxonomyPreview.map((area) => (
                   <option value={area.id || ''} key={area.id || area.label}>
                     {area.label || area.id}
@@ -581,6 +671,8 @@ export default function AdminView() {
                     id="new-facility-id"
                     className="text-input"
                     value={taxonomyForm.newFacilityId}
+                    placeholder={taxonomyInputTips.facilityId}
+                    title={taxonomyInputTips.facilityId}
                     onChange={(event) =>
                       setTaxonomyForm((current) => ({ ...current, newFacilityId: event.target.value }))
                     }
@@ -593,6 +685,8 @@ export default function AdminView() {
                     id="new-facility-label"
                     className="text-input"
                     value={taxonomyForm.newFacilityLabel}
+                    placeholder={taxonomyInputTips.facilityLabel}
+                    title={taxonomyInputTips.facilityLabel}
                     onChange={(event) =>
                       setTaxonomyForm((current) => ({ ...current, newFacilityLabel: event.target.value }))
                     }
@@ -613,7 +707,6 @@ export default function AdminView() {
                       setTaxonomyForm((current) => ({ ...current, serviceId: event.target.value }))
                     }
                   >
-                    <option value="">Choose impact service</option>
                     {(selectedFacility?.impacted_services || []).map((service) => (
                       <option value={service.id || ''} key={service.id || service.label}>
                         {service.label || service.id}
@@ -633,6 +726,8 @@ export default function AdminView() {
                     id="new-service-id"
                     className="text-input"
                     value={taxonomyForm.newServiceId}
+                    placeholder={taxonomyInputTips.serviceId}
+                    title={taxonomyInputTips.serviceId}
                     onChange={(event) =>
                       setTaxonomyForm((current) => ({ ...current, newServiceId: event.target.value }))
                     }
@@ -645,6 +740,8 @@ export default function AdminView() {
                     id="new-service-label"
                     className="text-input"
                     value={taxonomyForm.newServiceLabel}
+                    placeholder={taxonomyInputTips.serviceLabel}
+                    title={taxonomyInputTips.serviceLabel}
                     onChange={(event) =>
                       setTaxonomyForm((current) => ({ ...current, newServiceLabel: event.target.value }))
                     }
@@ -659,6 +756,8 @@ export default function AdminView() {
                 id="new-request-type-id"
                 className="text-input"
                 value={taxonomyForm.requestTypeId}
+                placeholder={taxonomyInputTips.requestTypeId}
+                title={taxonomyInputTips.requestTypeId}
                 onChange={(event) =>
                   setTaxonomyForm((current) => ({ ...current, requestTypeId: event.target.value }))
                 }
@@ -671,6 +770,8 @@ export default function AdminView() {
                 id="new-request-type-label"
                 className="text-input"
                 value={taxonomyForm.requestTypeLabel}
+                placeholder={taxonomyInputTips.requestTypeLabel}
+                title={taxonomyInputTips.requestTypeLabel}
                 onChange={(event) =>
                   setTaxonomyForm((current) => ({ ...current, requestTypeLabel: event.target.value }))
                 }

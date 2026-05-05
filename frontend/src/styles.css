@@ -771,6 +771,16 @@ a {
   background: #f8fafc;
 }
 
+.stat-card.new-stat-card {
+  border-color: #bfdbfe;
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%);
+}
+
+.stat-card.new-stat-card h3,
+.stat-card.new-stat-card p {
+  color: #1e3a8a;
+}
+
 .stat-card h3 {
   margin: 0;
   font-size: 12px;
