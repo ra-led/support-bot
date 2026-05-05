@@ -333,6 +333,7 @@ class Storage:
         self.conn.row_factory = sqlite3.Row
         self._init_db()
         self.taxonomy = self._load_taxonomy_from_file()
+        self.taxonomy_version = self._ensure_taxonomy_version_baseline()
         self.analytics_schema: Dict[str, List[Dict[str, Any]]] = {
             "default": DEFAULT_ANALYTICS_SCHEMA
         }
@@ -398,6 +399,15 @@ class Storage:
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS taxonomy_versions (
+                version INTEGER PRIMARY KEY,
+                facilities_areas_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
         self.conn.commit()
         self._ensure_column("requests", "dialog_state_json", "TEXT")
 
@@ -447,6 +457,24 @@ class Storage:
                 f"Taxonomy file {TAXONOMY_FILE_PATH} contains invalid JSON: {error}"
             ) from error
         return self._validate_taxonomy(parsed)
+
+    def _ensure_taxonomy_version_baseline(self) -> int:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT MAX(version) AS version FROM taxonomy_versions")
+        row = cursor.fetchone()
+        existing_version = int(row["version"] or 0) if row else 0
+        if existing_version > 0:
+            return existing_version
+
+        cursor.execute(
+            """
+            INSERT INTO taxonomy_versions (version, facilities_areas_json, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (1, self._json_dump(self.taxonomy), dt.datetime.utcnow().isoformat()),
+        )
+        self.conn.commit()
+        return 1
 
     def save_message(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         message_id = payload["message_id"]
@@ -702,15 +730,30 @@ class Storage:
     def get_taxonomy(self) -> List[Dict[str, Any]]:
         return copy.deepcopy(self.taxonomy)
 
-    def save_taxonomy(self, taxonomy: Any) -> None:
+    def get_taxonomy_version(self) -> int:
+        return self.taxonomy_version
+
+    def save_taxonomy(self, taxonomy: Any) -> int:
         normalized = self._validate_taxonomy(taxonomy)
+        next_version = self.taxonomy_version + 1
         tmp_path = TAXONOMY_FILE_PATH.with_suffix(".json.tmp")
         tmp_path.write_text(
             json.dumps(normalized, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
         tmp_path.replace(TAXONOMY_FILE_PATH)
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO taxonomy_versions (version, facilities_areas_json, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (next_version, self._json_dump(normalized), dt.datetime.utcnow().isoformat()),
+        )
+        self.conn.commit()
         self.taxonomy = normalized
+        self.taxonomy_version = next_version
+        return next_version
 
     def get_analytics_schema(self, tenant_id: str) -> List[Dict[str, Any]]:
         return self.analytics_schema.get(tenant_id, DEFAULT_ANALYTICS_SCHEMA)

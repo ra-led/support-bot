@@ -273,7 +273,10 @@ async def get_request_messages(
 
 @router.get("/v1/taxonomy")
 async def get_taxonomy() -> Dict[str, Any]:
-    return {"facilities_areas": storage.get_taxonomy()}
+    return {
+        "facilities_areas": storage.get_taxonomy(),
+        "taxonomy_version": storage.get_taxonomy_version(),
+    }
 
 
 @router.get("/v1/admin/taxonomy")
@@ -281,7 +284,10 @@ async def admin_get_taxonomy(
     x_admin_password: Optional[str] = Header(default=None),
 ) -> Dict[str, Any]:
     assert_admin_password(x_admin_password)
-    return {"facilities_areas": storage.get_taxonomy()}
+    return {
+        "facilities_areas": storage.get_taxonomy(),
+        "taxonomy_version": storage.get_taxonomy_version(),
+    }
 
 
 @router.put("/v1/admin/taxonomy")
@@ -291,10 +297,13 @@ async def admin_update_taxonomy(
 ) -> Dict[str, Any]:
     assert_admin_password(x_admin_password)
     try:
-        storage.save_taxonomy(payload.facilities_areas)
+        taxonomy_version = storage.save_taxonomy(payload.facilities_areas)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    return {"facilities_areas": storage.get_taxonomy()}
+    return {
+        "facilities_areas": storage.get_taxonomy(),
+        "taxonomy_version": taxonomy_version,
+    }
 
 
 @router.get("/v1/analytics/schema")

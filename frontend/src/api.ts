@@ -196,7 +196,7 @@ export async function fetchAdminTaxonomy() {
   const response = await api.get('/v1/admin/taxonomy', {
     headers: getAdminHeaders()
   })
-  return response.data as { facilities_areas: unknown[] }
+  return response.data as { facilities_areas: unknown[]; taxonomy_version?: number }
 }
 
 export async function updateAdminTaxonomy(facilitiesAreas: unknown[]) {
@@ -205,7 +205,7 @@ export async function updateAdminTaxonomy(facilitiesAreas: unknown[]) {
     { facilities_areas: facilitiesAreas },
     { headers: getAdminHeaders() }
   )
-  return response.data as { facilities_areas: unknown[] }
+  return response.data as { facilities_areas: unknown[]; taxonomy_version?: number }
 }
 
 export async function fetchRequests() {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   clearAdminPassword,
   downloadIssuesExport,
@@ -19,6 +19,8 @@ interface StatsResponse {
 interface RequestItem {
   request_id: string
   dialog_id?: string
+  created_at?: string
+  updated_at?: string
   title: string
   description: string
   urgency: string
@@ -71,19 +73,201 @@ const getRequestTypeLabel = (taxonomy: TaxonomyFacilityArea[], requestTypeId?: s
   return null
 }
 
-const prettyJson = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`
+const VIEWED_ADMIN_DIALOG_IDS_STORAGE_KEY = 'supportBotAdminViewedDialogIds'
+const CREATE_NEW_VALUE = '__create_new__'
 
-const parseTaxonomyJson = (text: string): { value: TaxonomyFacilityArea[] | null; error: string | null } => {
-  try {
-    const parsed = JSON.parse(text)
-    if (!Array.isArray(parsed)) {
-      return { value: null, error: 'Taxonomy JSON must be an array at the top level.' }
-    }
-    return { value: parsed as TaxonomyFacilityArea[], error: null }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Invalid JSON.'
-    return { value: null, error: message }
+interface TaxonomyFormState {
+  facilityId: string
+  newFacilityId: string
+  newFacilityLabel: string
+  serviceId: string
+  newServiceId: string
+  newServiceLabel: string
+  requestTypeId: string
+  requestTypeLabel: string
+}
+
+interface DeleteTaxonomyTarget {
+  kind: 'facility' | 'service' | 'request_type'
+  areaId: string
+  serviceId?: string
+  requestTypeId?: string
+  label: string
+}
+
+const emptyTaxonomyForm: TaxonomyFormState = {
+  facilityId: '',
+  newFacilityId: '',
+  newFacilityLabel: '',
+  serviceId: '',
+  newServiceId: '',
+  newServiceLabel: '',
+  requestTypeId: '',
+  requestTypeLabel: ''
+}
+
+interface DialogViewSnapshot {
+  ids: Set<string>
+  hasBaseline: boolean
+}
+
+const getDialogId = (request: RequestItem) => request.dialog_id || request.request_id
+
+const readViewedDialogSnapshot = (): DialogViewSnapshot => {
+  if (typeof window === 'undefined') {
+    return { ids: new Set(), hasBaseline: false }
   }
+
+  const storedValue = localStorage.getItem(VIEWED_ADMIN_DIALOG_IDS_STORAGE_KEY)
+  if (!storedValue) {
+    return { ids: new Set(), hasBaseline: false }
+  }
+
+  try {
+    const parsed = JSON.parse(storedValue)
+    if (!Array.isArray(parsed)) {
+      return { ids: new Set(), hasBaseline: false }
+    }
+    return {
+      ids: new Set(parsed.filter((value): value is string => typeof value === 'string')),
+      hasBaseline: true
+    }
+  } catch {
+    return { ids: new Set(), hasBaseline: false }
+  }
+}
+
+const writeViewedDialogSnapshot = (dialogIds: string[]) => {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(VIEWED_ADMIN_DIALOG_IDS_STORAGE_KEY, JSON.stringify(dialogIds))
+}
+
+const cloneTaxonomy = (taxonomy: TaxonomyFacilityArea[]) =>
+  taxonomy.map((area) => ({
+    ...area,
+    impacted_services: (area.impacted_services || []).map((service) => ({
+      ...service,
+      request_types: [...(service.request_types || [])]
+    }))
+  }))
+
+const getUsedTaxonomyIds = (taxonomy: TaxonomyFacilityArea[]) => {
+  const ids = new Set<string>()
+  for (const area of taxonomy) {
+    if (area.id) ids.add(area.id)
+    for (const service of area.impacted_services || []) {
+      if (service.id) ids.add(service.id)
+      for (const requestType of service.request_types || []) {
+        if (requestType.id) ids.add(requestType.id)
+      }
+    }
+  }
+  return ids
+}
+
+const buildTaxonomyWithRequestType = (
+  taxonomy: TaxonomyFacilityArea[],
+  form: TaxonomyFormState
+): { value: TaxonomyFacilityArea[] | null; error: string | null } => {
+  const facilityId = form.facilityId.trim()
+  const serviceId = form.serviceId.trim()
+  const newFacilityId = form.newFacilityId.trim()
+  const newFacilityLabel = form.newFacilityLabel.trim()
+  const newServiceId = form.newServiceId.trim()
+  const newServiceLabel = form.newServiceLabel.trim()
+  const requestTypeId = form.requestTypeId.trim()
+  const requestTypeLabel = form.requestTypeLabel.trim()
+
+  if (!facilityId) return { value: null, error: 'Choose a facility area.' }
+  if (!requestTypeId || !requestTypeLabel) {
+    return { value: null, error: 'Fill request type id and label.' }
+  }
+
+  const usedIds = getUsedTaxonomyIds(taxonomy)
+  if (usedIds.has(requestTypeId)) {
+    return { value: null, error: 'Request type id already exists.' }
+  }
+
+  const requestType = { id: requestTypeId, label: requestTypeLabel }
+
+  if (facilityId === CREATE_NEW_VALUE) {
+    if (!newFacilityId || !newFacilityLabel || !newServiceId || !newServiceLabel) {
+      return { value: null, error: 'Fill new facility and impact service fields.' }
+    }
+    if (newFacilityId === newServiceId || requestTypeId === newFacilityId || requestTypeId === newServiceId) {
+      return { value: null, error: 'New taxonomy ids must be unique.' }
+    }
+    if (usedIds.has(newFacilityId)) return { value: null, error: 'Facility id already exists.' }
+    if (usedIds.has(newServiceId)) return { value: null, error: 'Impact service id already exists.' }
+    return {
+      value: [
+        ...cloneTaxonomy(taxonomy),
+        {
+          id: newFacilityId,
+          label: newFacilityLabel,
+          impacted_services: [{ id: newServiceId, label: newServiceLabel, request_types: [requestType] }]
+        }
+      ],
+      error: null
+    }
+  }
+
+  const areaIndex = taxonomy.findIndex((area) => area.id === facilityId)
+  if (areaIndex < 0) return { value: null, error: 'Selected facility area was not found.' }
+  if (!serviceId) return { value: null, error: 'Choose an impact service.' }
+
+  const nextTaxonomy = cloneTaxonomy(taxonomy)
+  const selectedArea = nextTaxonomy[areaIndex]
+  selectedArea.impacted_services = selectedArea.impacted_services || []
+
+  if (serviceId === CREATE_NEW_VALUE) {
+    if (!newServiceId || !newServiceLabel) {
+      return { value: null, error: 'Fill new impact service id and label.' }
+    }
+    if (requestTypeId === newServiceId) {
+      return { value: null, error: 'New taxonomy ids must be unique.' }
+    }
+    if (usedIds.has(newServiceId)) return { value: null, error: 'Impact service id already exists.' }
+    selectedArea.impacted_services.push({
+      id: newServiceId,
+      label: newServiceLabel,
+      request_types: [requestType]
+    })
+    return { value: nextTaxonomy, error: null }
+  }
+
+  const selectedService = selectedArea.impacted_services.find((service) => service.id === serviceId)
+  if (!selectedService) return { value: null, error: 'Selected impact service was not found.' }
+  selectedService.request_types = [...(selectedService.request_types || []), requestType]
+  return { value: nextTaxonomy, error: null }
+}
+
+const deleteTaxonomyNode = (taxonomy: TaxonomyFacilityArea[], target: DeleteTaxonomyTarget) => {
+  if (target.kind === 'facility') {
+    return cloneTaxonomy(taxonomy).filter((area) => area.id !== target.areaId)
+  }
+
+  return cloneTaxonomy(taxonomy).map((area) => {
+    if (area.id !== target.areaId) return area
+    if (target.kind === 'service') {
+      return {
+        ...area,
+        impacted_services: (area.impacted_services || []).filter((service) => service.id !== target.serviceId)
+      }
+    }
+    return {
+      ...area,
+      impacted_services: (area.impacted_services || []).map((service) => {
+        if (service.id !== target.serviceId) return service
+        return {
+          ...service,
+          request_types: (service.request_types || []).filter(
+            (requestType) => requestType.id !== target.requestTypeId
+          )
+        }
+      })
+    }
+  })
 }
 
 const extractErrorMessage = (error: unknown, fallback: string) => {
@@ -105,6 +289,7 @@ export default function AdminView() {
   const [isAuthenticating, setIsAuthenticating] = useState(false)
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [requests, setRequests] = useState<RequestItem[]>([])
+  const [newDialogIds, setNewDialogIds] = useState<Set<string>>(new Set())
   const [activeConversation, setActiveConversation] = useState<{
     requestId: string
     title: string
@@ -112,31 +297,41 @@ export default function AdminView() {
   } | null>(null)
   const [isExporting, setIsExporting] = useState(false)
 
-  const [taxonomyEditorValue, setTaxonomyEditorValue] = useState('[]\n')
   const [taxonomyPreview, setTaxonomyPreview] = useState<TaxonomyFacilityArea[]>([])
-  const [taxonomyError, setTaxonomyError] = useState<string | null>(null)
-  const [taxonomySavedCanonical, setTaxonomySavedCanonical] = useState('[]')
+  const [taxonomyVersion, setTaxonomyVersion] = useState<number | null>(null)
+  const [taxonomyForm, setTaxonomyForm] = useState<TaxonomyFormState>(emptyTaxonomyForm)
   const [taxonomySaveError, setTaxonomySaveError] = useState<string | null>(null)
   const [taxonomySaveSuccess, setTaxonomySaveSuccess] = useState<string | null>(null)
   const [isSavingTaxonomy, setIsSavingTaxonomy] = useState(false)
+  const initialDialogSnapshotRef = useRef<DialogViewSnapshot | null>(null)
 
   const loadAdminData = async () => {
+    if (!initialDialogSnapshotRef.current) {
+      initialDialogSnapshotRef.current = readViewedDialogSnapshot()
+    }
+
     const [statsResponse, requestsResponse, taxonomyResponse] = await Promise.all([
       fetchStats(),
       fetchRequests(),
       fetchAdminTaxonomy()
     ])
+    const loadedRequests = (requestsResponse.requests || []) as RequestItem[]
+    const currentDialogIds = Array.from(new Set(loadedRequests.map(getDialogId).filter(Boolean)))
+    const initialSnapshot = initialDialogSnapshotRef.current
+    const nextNewDialogIds = initialSnapshot.hasBaseline
+      ? new Set(currentDialogIds.filter((dialogId) => !initialSnapshot.ids.has(dialogId)))
+      : new Set<string>()
     const facilitiesAreas = Array.isArray(taxonomyResponse.facilities_areas)
       ? (taxonomyResponse.facilities_areas as TaxonomyFacilityArea[])
       : []
-    const editorValue = prettyJson(facilitiesAreas)
 
     setStats(statsResponse)
-    setRequests(requestsResponse.requests || [])
-    setTaxonomyEditorValue(editorValue)
+    setRequests(loadedRequests)
+    setNewDialogIds(nextNewDialogIds)
+    writeViewedDialogSnapshot(currentDialogIds)
     setTaxonomyPreview(facilitiesAreas)
-    setTaxonomyError(null)
-    setTaxonomySavedCanonical(JSON.stringify(facilitiesAreas))
+    setTaxonomyVersion(taxonomyResponse.taxonomy_version ?? null)
+    setTaxonomyForm(emptyTaxonomyForm)
     setTaxonomySaveError(null)
     setTaxonomySaveSuccess(null)
   }
@@ -179,16 +374,17 @@ export default function AdminView() {
 
   const handleLogout = () => {
     clearAdminPassword()
+    initialDialogSnapshotRef.current = null
     setIsAuthorized(false)
     setAdminPasswordInput('')
     setStats(null)
     setRequests([])
+    setNewDialogIds(new Set())
     setActiveConversation(null)
     setAuthError(null)
-    setTaxonomyEditorValue('[]\n')
     setTaxonomyPreview([])
-    setTaxonomyError(null)
-    setTaxonomySavedCanonical('[]')
+    setTaxonomyVersion(null)
+    setTaxonomyForm(emptyTaxonomyForm)
     setTaxonomySaveError(null)
     setTaxonomySaveSuccess(null)
   }
@@ -219,48 +415,57 @@ export default function AdminView() {
     }
   }
 
-  const handleTaxonomyEditorChange = (nextValue: string) => {
-    setTaxonomyEditorValue(nextValue)
-    setTaxonomySaveError(null)
-    setTaxonomySaveSuccess(null)
+  const selectedFacility = useMemo(
+    () => taxonomyPreview.find((area) => area.id === taxonomyForm.facilityId) || null,
+    [taxonomyForm.facilityId, taxonomyPreview]
+  )
 
-    const parsed = parseTaxonomyJson(nextValue)
-    setTaxonomyError(parsed.error)
-    if (parsed.value) {
-      setTaxonomyPreview(parsed.value)
-    }
-  }
-
-  const isTaxonomyChanged = useMemo(() => {
-    if (taxonomyError) return false
-    return JSON.stringify(taxonomyPreview) !== taxonomySavedCanonical
-  }, [taxonomyError, taxonomyPreview, taxonomySavedCanonical])
-
-  const handleSaveTaxonomy = async () => {
-    const parsed = parseTaxonomyJson(taxonomyEditorValue)
-    if (!parsed.value) {
-      setTaxonomyError(parsed.error)
-      return
-    }
-
+  const persistTaxonomy = async (nextTaxonomy: TaxonomyFacilityArea[], successMessage: string) => {
     setIsSavingTaxonomy(true)
     setTaxonomySaveError(null)
     setTaxonomySaveSuccess(null)
     try {
-      const response = await updateAdminTaxonomy(parsed.value)
+      const response = await updateAdminTaxonomy(nextTaxonomy)
       const facilitiesAreas = Array.isArray(response.facilities_areas)
         ? (response.facilities_areas as TaxonomyFacilityArea[])
         : []
       setTaxonomyPreview(facilitiesAreas)
-      setTaxonomyEditorValue(prettyJson(facilitiesAreas))
-      setTaxonomySavedCanonical(JSON.stringify(facilitiesAreas))
-      setTaxonomyError(null)
-      setTaxonomySaveSuccess('Taxonomy saved.')
+      setTaxonomyVersion(response.taxonomy_version ?? null)
+      setTaxonomySaveSuccess(
+        response.taxonomy_version
+          ? `${successMessage} Version ${response.taxonomy_version}.`
+          : successMessage
+      )
+      return true
     } catch (error) {
       setTaxonomySaveError(extractErrorMessage(error, 'Failed to save taxonomy.'))
+      return false
     } finally {
       setIsSavingTaxonomy(false)
     }
+  }
+
+  const handleAddRequestType = async () => {
+    if (isSavingTaxonomy) return
+    const result = buildTaxonomyWithRequestType(taxonomyPreview, taxonomyForm)
+    if (!result.value) {
+      setTaxonomySaveError(result.error)
+      setTaxonomySaveSuccess(null)
+      return
+    }
+
+    const saved = await persistTaxonomy(result.value, 'Request type added.')
+    if (saved) {
+      setTaxonomyForm(emptyTaxonomyForm)
+    }
+  }
+
+  const handleDeleteTaxonomyNode = async (target: DeleteTaxonomyTarget) => {
+    if (isSavingTaxonomy) return
+    const nestedWarning = target.kind === 'request_type' ? '' : ' and all nested taxonomy nodes'
+    const confirmed = window.confirm(`Delete "${target.label}"${nestedWarning}?`)
+    if (!confirmed) return
+    await persistTaxonomy(deleteTaxonomyNode(taxonomyPreview, target), 'Taxonomy node deleted.')
   }
 
   if (!isAuthorized) {
@@ -336,51 +541,231 @@ export default function AdminView() {
       <section className="panel admin-taxonomy">
         <div className="admin-overview-header">
           <h2>Facility Taxonomy</h2>
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => void handleSaveTaxonomy()}
-            disabled={isSavingTaxonomy || !!taxonomyError || !isTaxonomyChanged}
-          >
-            {isSavingTaxonomy ? 'Saving...' : 'Save taxonomy'}
-          </button>
+          {taxonomyVersion ? <span className="taxonomy-version">Version {taxonomyVersion}</span> : null}
         </div>
-        <p className="muted">Edit JSON, keep it valid, and save. Server writes this taxonomy into file.</p>
 
         <div className="taxonomy-layout">
-          <div className="taxonomy-editor-panel">
-            <h3>JSON editor</h3>
-            <textarea
-              className="taxonomy-editor"
-              value={taxonomyEditorValue}
-              onChange={(event) => handleTaxonomyEditorChange(event.target.value)}
-              spellCheck={false}
-            />
-            {taxonomyError ? <p className="error-text">Invalid JSON: {taxonomyError}</p> : null}
+          <div className="taxonomy-form-panel">
+            <h3>Add request type</h3>
+            <div className="taxonomy-form-grid">
+              <label className="form-label" htmlFor="taxonomy-facility">
+                Facility
+              </label>
+              <select
+                id="taxonomy-facility"
+                className="text-input"
+                value={taxonomyForm.facilityId}
+                onChange={(event) =>
+                  setTaxonomyForm((current) => ({
+                    ...current,
+                    facilityId: event.target.value,
+                    serviceId: event.target.value === CREATE_NEW_VALUE ? CREATE_NEW_VALUE : ''
+                  }))
+                }
+              >
+                <option value="">Choose facility</option>
+                {taxonomyPreview.map((area) => (
+                  <option value={area.id || ''} key={area.id || area.label}>
+                    {area.label || area.id}
+                  </option>
+                ))}
+                <option value={CREATE_NEW_VALUE}>Create new</option>
+              </select>
+
+              {taxonomyForm.facilityId === CREATE_NEW_VALUE ? (
+                <>
+                  <label className="form-label" htmlFor="new-facility-id">
+                    New facility ID
+                  </label>
+                  <input
+                    id="new-facility-id"
+                    className="text-input"
+                    value={taxonomyForm.newFacilityId}
+                    onChange={(event) =>
+                      setTaxonomyForm((current) => ({ ...current, newFacilityId: event.target.value }))
+                    }
+                  />
+
+                  <label className="form-label" htmlFor="new-facility-label">
+                    New facility label
+                  </label>
+                  <input
+                    id="new-facility-label"
+                    className="text-input"
+                    value={taxonomyForm.newFacilityLabel}
+                    onChange={(event) =>
+                      setTaxonomyForm((current) => ({ ...current, newFacilityLabel: event.target.value }))
+                    }
+                  />
+                </>
+              ) : null}
+
+              {taxonomyForm.facilityId && taxonomyForm.facilityId !== CREATE_NEW_VALUE ? (
+                <>
+                  <label className="form-label" htmlFor="taxonomy-service">
+                    Impact service
+                  </label>
+                  <select
+                    id="taxonomy-service"
+                    className="text-input"
+                    value={taxonomyForm.serviceId}
+                    onChange={(event) =>
+                      setTaxonomyForm((current) => ({ ...current, serviceId: event.target.value }))
+                    }
+                  >
+                    <option value="">Choose impact service</option>
+                    {(selectedFacility?.impacted_services || []).map((service) => (
+                      <option value={service.id || ''} key={service.id || service.label}>
+                        {service.label || service.id}
+                      </option>
+                    ))}
+                    <option value={CREATE_NEW_VALUE}>Create new</option>
+                  </select>
+                </>
+              ) : null}
+
+              {taxonomyForm.serviceId === CREATE_NEW_VALUE ? (
+                <>
+                  <label className="form-label" htmlFor="new-service-id">
+                    New impact service ID
+                  </label>
+                  <input
+                    id="new-service-id"
+                    className="text-input"
+                    value={taxonomyForm.newServiceId}
+                    onChange={(event) =>
+                      setTaxonomyForm((current) => ({ ...current, newServiceId: event.target.value }))
+                    }
+                  />
+
+                  <label className="form-label" htmlFor="new-service-label">
+                    New impact service label
+                  </label>
+                  <input
+                    id="new-service-label"
+                    className="text-input"
+                    value={taxonomyForm.newServiceLabel}
+                    onChange={(event) =>
+                      setTaxonomyForm((current) => ({ ...current, newServiceLabel: event.target.value }))
+                    }
+                  />
+                </>
+              ) : null}
+
+              <label className="form-label" htmlFor="new-request-type-id">
+                Request type ID
+              </label>
+              <input
+                id="new-request-type-id"
+                className="text-input"
+                value={taxonomyForm.requestTypeId}
+                onChange={(event) =>
+                  setTaxonomyForm((current) => ({ ...current, requestTypeId: event.target.value }))
+                }
+              />
+
+              <label className="form-label" htmlFor="new-request-type-label">
+                Request type label
+              </label>
+              <input
+                id="new-request-type-label"
+                className="text-input"
+                value={taxonomyForm.requestTypeLabel}
+                onChange={(event) =>
+                  setTaxonomyForm((current) => ({ ...current, requestTypeLabel: event.target.value }))
+                }
+              />
+            </div>
+
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => void handleAddRequestType()}
+              disabled={isSavingTaxonomy}
+            >
+              {isSavingTaxonomy ? 'Saving...' : 'Add request type'}
+            </button>
             {taxonomySaveError ? <p className="error-text">{taxonomySaveError}</p> : null}
             {taxonomySaveSuccess ? <p className="muted">{taxonomySaveSuccess}</p> : null}
           </div>
 
           <div className="taxonomy-tree-panel">
-            <h3>Tree preview</h3>
+            <h3>Taxonomy tree</h3>
             {taxonomyPreview.length === 0 ? (
               <p className="muted">No facility areas in taxonomy.</p>
             ) : (
               <ul className="taxonomy-tree">
                 {taxonomyPreview.map((area, areaIndex) => (
                   <li key={`${area.id || 'area'}-${areaIndex}`}>
-                    <strong>{area.label || area.id || `Area ${areaIndex + 1}`}</strong>
-                    <span className="taxonomy-id">{area.id || 'no-id'}</span>
+                    <div className="taxonomy-node-row">
+                      <span>
+                        <strong>{area.label || area.id || `Area ${areaIndex + 1}`}</strong>
+                        <span className="taxonomy-id">{area.id || 'no-id'}</span>
+                      </span>
+                      <button
+                        type="button"
+                        className="btn danger taxonomy-delete-btn"
+                        onClick={() =>
+                          void handleDeleteTaxonomyNode({
+                            kind: 'facility',
+                            areaId: area.id || '',
+                            label: area.label || area.id || `Area ${areaIndex + 1}`
+                          })
+                        }
+                        disabled={isSavingTaxonomy || !area.id}
+                      >
+                        Delete
+                      </button>
+                    </div>
                     <ul>
                       {(area.impacted_services || []).map((service, serviceIndex) => (
                         <li key={`${service.id || 'service'}-${serviceIndex}`}>
-                          <span>{service.label || service.id || `Service ${serviceIndex + 1}`}</span>
-                          <span className="taxonomy-id">{service.id || 'no-id'}</span>
+                          <div className="taxonomy-node-row">
+                            <span>
+                              <span>{service.label || service.id || `Service ${serviceIndex + 1}`}</span>
+                              <span className="taxonomy-id">{service.id || 'no-id'}</span>
+                            </span>
+                            <button
+                              type="button"
+                              className="btn danger taxonomy-delete-btn"
+                              onClick={() =>
+                                void handleDeleteTaxonomyNode({
+                                  kind: 'service',
+                                  areaId: area.id || '',
+                                  serviceId: service.id || '',
+                                  label: service.label || service.id || `Service ${serviceIndex + 1}`
+                                })
+                              }
+                              disabled={isSavingTaxonomy || !area.id || !service.id}
+                            >
+                              Delete
+                            </button>
+                          </div>
                           <ul>
                             {(service.request_types || []).map((requestType, typeIndex) => (
                               <li key={`${requestType.id || 'type'}-${typeIndex}`}>
-                                <span>{requestType.label || requestType.id || `Type ${typeIndex + 1}`}</span>
-                                <span className="taxonomy-id">{requestType.id || 'no-id'}</span>
+                                <div className="taxonomy-node-row">
+                                  <span>
+                                    <span>{requestType.label || requestType.id || `Type ${typeIndex + 1}`}</span>
+                                    <span className="taxonomy-id">{requestType.id || 'no-id'}</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="btn danger taxonomy-delete-btn"
+                                    onClick={() =>
+                                      void handleDeleteTaxonomyNode({
+                                        kind: 'request_type',
+                                        areaId: area.id || '',
+                                        serviceId: service.id || '',
+                                        requestTypeId: requestType.id || '',
+                                        label: requestType.label || requestType.id || `Type ${typeIndex + 1}`
+                                      })
+                                    }
+                                    disabled={isSavingTaxonomy || !area.id || !service.id || !requestType.id}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
                               </li>
                             ))}
                           </ul>
@@ -396,61 +781,71 @@ export default function AdminView() {
       </section>
 
       <section className="panel admin-requests">
-        <h2>Extracted Requests</h2>
+        <div className="admin-requests-header">
+          <h2>Extracted Requests</h2>
+          {newDialogIds.size > 0 ? <span className="new-dialog-summary">{newDialogIds.size} new</span> : null}
+        </div>
         <div className="request-list">
           {requests.length === 0 ? (
             <p className="muted">No requests yet.</p>
           ) : (
-            requests.map((request) => (
-              <article key={request.request_id} className="request-card">
-                <div className="request-header">
-                  <strong>
-                    {(request.reporter_email || 'Unknown') + ' | ' + (request.title || 'Untitled request')}
-                  </strong>
-                </div>
-                <p className="muted">{request.description}</p>
-                <div className="request-meta">
-                  <span>
-                    <strong>Location:</strong>{' '}
-                    {request.location?.room ||
-                      request.location?.floor ||
-                      request.location?.building ||
-                      request.location?.free_text ||
-                      'Unknown'}
-                  </span>
-                </div>
-                <div className="request-meta">
-                  <span>
-                    <strong>Type:</strong>{' '}
-                    {(() => {
-                      const typeId = request.taxonomy?.request_type || null
-                      const typeLabel = getRequestTypeLabel(taxonomyPreview, typeId)
-                      if (!typeId) return 'Unknown'
-                      return `${typeLabel || 'Unknown'} (${typeId})`
-                    })()}
-                  </span>
-                </div>
-                <div className="request-meta">
-                  <span>
-                    <strong>Urgency:</strong> {request.urgency || 'unknown'}
-                  </span>
-                </div>
-                <div className="request-meta">
-                  <span>
-                    <strong>Dialog ID:</strong> {request.dialog_id || request.request_id}
-                  </span>
-                </div>
-                <div className="request-meta">
-                  <button
-                    type="button"
-                    className="btn primary"
-                    onClick={() => void handleOpenConversation(request)}
-                  >
-                    View conversation
-                  </button>
-                </div>
-              </article>
-            ))
+            requests.map((request) => {
+              const isNewDialog = newDialogIds.has(getDialogId(request))
+              return (
+                <article
+                  key={request.request_id}
+                  className={`request-card ${isNewDialog ? 'new-dialog-card' : ''}`}
+                >
+                  <div className="request-header">
+                    <strong>
+                      {(request.reporter_email || 'Unknown') + ' | ' + (request.title || 'Untitled request')}
+                    </strong>
+                    {isNewDialog ? <span className="new-dialog-badge">New</span> : null}
+                  </div>
+                  <p className="muted">{request.description}</p>
+                  <div className="request-meta">
+                    <span>
+                      <strong>Location:</strong>{' '}
+                      {request.location?.room ||
+                        request.location?.floor ||
+                        request.location?.building ||
+                        request.location?.free_text ||
+                        'Unknown'}
+                    </span>
+                  </div>
+                  <div className="request-meta">
+                    <span>
+                      <strong>Type:</strong>{' '}
+                      {(() => {
+                        const typeId = request.taxonomy?.request_type || null
+                        const typeLabel = getRequestTypeLabel(taxonomyPreview, typeId)
+                        if (!typeId) return 'Unknown'
+                        return `${typeLabel || 'Unknown'} (${typeId})`
+                      })()}
+                    </span>
+                  </div>
+                  <div className="request-meta">
+                    <span>
+                      <strong>Urgency:</strong> {request.urgency || 'unknown'}
+                    </span>
+                  </div>
+                  <div className="request-meta">
+                    <span>
+                      <strong>Dialog ID:</strong> {request.dialog_id || request.request_id}
+                    </span>
+                  </div>
+                  <div className="request-meta">
+                    <button
+                      type="button"
+                      className="btn primary"
+                      onClick={() => void handleOpenConversation(request)}
+                    >
+                      View conversation
+                    </button>
+                  </div>
+                </article>
+              )
+            })
           )}
         </div>
       </section>
