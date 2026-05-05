@@ -347,6 +347,7 @@ export default function AdminView() {
   const [taxonomySaveError, setTaxonomySaveError] = useState<string | null>(null)
   const [taxonomySaveSuccess, setTaxonomySaveSuccess] = useState<string | null>(null)
   const [isSavingTaxonomy, setIsSavingTaxonomy] = useState(false)
+  const [isTaxonomyCollapsed, setIsTaxonomyCollapsed] = useState(true)
   const initialDialogSnapshotRef = useRef<DialogViewSnapshot | null>(null)
 
   const loadAdminData = async () => {
@@ -627,13 +628,25 @@ export default function AdminView() {
       <section className="panel admin-taxonomy">
         <div className="admin-overview-header">
           <h2>Facility Taxonomy</h2>
-          {taxonomyVersion ? <span className="taxonomy-version">Version {taxonomyVersion}</span> : null}
+          <div className="taxonomy-header-actions">
+            {taxonomyVersion ? <span className="taxonomy-version">Version {taxonomyVersion}</span> : null}
+            <button
+              type="button"
+              className="btn subtle"
+              onClick={() => setIsTaxonomyCollapsed((current) => !current)}
+              aria-expanded={!isTaxonomyCollapsed}
+              aria-controls="admin-taxonomy-body"
+            >
+              {isTaxonomyCollapsed ? 'Show' : 'Hide'}
+            </button>
+          </div>
         </div>
 
-        <div className="taxonomy-layout">
-          <div className="taxonomy-form-panel">
-            <h3>Add request type</h3>
-            <div className="taxonomy-form-grid">
+        {!isTaxonomyCollapsed ? (
+          <div className="taxonomy-layout" id="admin-taxonomy-body">
+            <div className="taxonomy-form-panel">
+              <h3>Add request type</h3>
+              <div className="taxonomy-form-grid">
               <label className="form-label" htmlFor="taxonomy-facility">
                 Facility
               </label>
@@ -790,7 +803,7 @@ export default function AdminView() {
             {taxonomySaveSuccess ? <p className="muted">{taxonomySaveSuccess}</p> : null}
           </div>
 
-          <div className="taxonomy-tree-panel">
+            <div className="taxonomy-tree-panel">
             <h3>Taxonomy tree</h3>
             {taxonomyPreview.length === 0 ? (
               <p className="muted">No facility areas in taxonomy.</p>
@@ -877,8 +890,9 @@ export default function AdminView() {
                 ))}
               </ul>
             )}
+            </div>
           </div>
-        </div>
+        ) : null}
       </section>
 
       <section className="panel admin-requests">
