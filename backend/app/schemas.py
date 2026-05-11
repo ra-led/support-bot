@@ -32,3 +32,13 @@ class AnalyticsSchemaUpdate(BaseModel):
 
 class TaxonomyUpdate(BaseModel):
     facilities_areas: List[Dict[str, Any]]
+
+
+class AdminRequestUpdate(BaseModel):
+    reporter_email: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    urgency: Optional[str] = None
+    status: Optional[str] = None
+    location: Optional[Dict[str, Any]] = None
+    taxonomy: Optional[Dict[str, Any]] = None

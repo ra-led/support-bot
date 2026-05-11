@@ -8,6 +8,7 @@ import {
   fetchStats,
   getAdminPassword,
   setAdminPassword,
+  updateAdminRequest,
   updateAdminTaxonomy
 } from '../api'
 
@@ -59,6 +60,27 @@ interface TaxonomyFacilityArea {
   impacted_services?: TaxonomyImpactedService[]
 }
 
+interface RequestUpdateFormState {
+  reporterEmail: string
+  title: string
+  description: string
+  urgency: string
+  status: string
+  site: string
+  building: string
+  floor: string
+  room: string
+  locationFreeText: string
+  requestTypeId: string
+}
+
+interface RequestTypeOption {
+  id: string
+  label: string
+  facilityAreaId: string
+  impactedServiceId: string
+}
+
 const getRequestTypeLabel = (taxonomy: TaxonomyFacilityArea[], requestTypeId?: string | null) => {
   if (!requestTypeId) return null
   for (const area of taxonomy) {
@@ -75,6 +97,9 @@ const getRequestTypeLabel = (taxonomy: TaxonomyFacilityArea[], requestTypeId?: s
 
 const VIEWED_ADMIN_DIALOG_IDS_STORAGE_KEY = 'supportBotAdminViewedDialogIds'
 const CREATE_NEW_VALUE = '__create_new__'
+const UNKNOWN_REQUEST_TYPE_VALUE = '__unknown_request_type__'
+const REQUEST_URGENCY_OPTIONS = ['unknown', 'low', 'normal', 'high']
+const REQUEST_STATUS_OPTIONS = ['needs_clarification', 'ready', 'submitted']
 
 const dateFormatter = new Intl.DateTimeFormat('en-AU', {
   dateStyle: 'medium'
@@ -177,6 +202,47 @@ const formatDateTime = (value?: string | null) => {
   const parsed = parseDateTime(value)
   if (parsed === 'Unknown') return parsed
   return dateTimeFormatter.format(parsed)
+}
+
+const getRequestTypeOptions = (taxonomy: TaxonomyFacilityArea[]) =>
+  taxonomy.flatMap((area) =>
+    (area.impacted_services || []).flatMap((service) =>
+      (service.request_types || []).flatMap((requestType) => {
+        if (!requestType.id) return []
+        return [
+          {
+            id: requestType.id,
+            label: requestType.label || requestType.id,
+            facilityAreaId: area.id || '',
+            impactedServiceId: service.id || ''
+          }
+        ]
+      })
+    )
+  )
+
+const getOptionValues = (options: string[], currentValue?: string | null) => {
+  const value = currentValue || ''
+  return value && !options.includes(value) ? [value, ...options] : options
+}
+
+const buildRequestUpdateForm = (request: RequestItem): RequestUpdateFormState => ({
+  reporterEmail: request.reporter_email || '',
+  title: request.title || '',
+  description: request.description || '',
+  urgency: request.urgency || 'unknown',
+  status: request.status || 'needs_clarification',
+  site: request.location?.site || '',
+  building: request.location?.building || '',
+  floor: request.location?.floor || '',
+  room: request.location?.room || '',
+  locationFreeText: request.location?.free_text || '',
+  requestTypeId: request.taxonomy?.request_type || UNKNOWN_REQUEST_TYPE_VALUE
+})
+
+const blankToNull = (value: string) => {
+  const trimmed = value.trim()
+  return trimmed || null
 }
 
 interface DialogViewSnapshot {
@@ -368,6 +434,12 @@ export default function AdminView() {
     title: string
     messages: { sender: string; content: string; created_at?: string | null }[]
   } | null>(null)
+  const [activeRequestUpdate, setActiveRequestUpdate] = useState<{
+    requestId: string
+    form: RequestUpdateFormState
+  } | null>(null)
+  const [requestUpdateError, setRequestUpdateError] = useState<string | null>(null)
+  const [isUpdatingRequest, setIsUpdatingRequest] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
 
   const [taxonomyPreview, setTaxonomyPreview] = useState<TaxonomyFacilityArea[]>([])
@@ -455,6 +527,8 @@ export default function AdminView() {
     setRequests([])
     setNewDialogIds(new Set())
     setActiveConversation(null)
+    setActiveRequestUpdate(null)
+    setRequestUpdateError(null)
     setAuthError(null)
     setTaxonomyPreview([])
     setTaxonomyVersion(null)
@@ -464,12 +538,78 @@ export default function AdminView() {
   }
 
   const handleOpenConversation = async (request: RequestItem) => {
+    setActiveRequestUpdate(null)
     const data = await fetchRequestMessages(request.request_id)
     setActiveConversation({
       requestId: request.request_id,
       title: request.title,
       messages: data.messages || []
     })
+  }
+
+  const handleOpenRequestUpdate = (request: RequestItem) => {
+    setActiveConversation(null)
+    setRequestUpdateError(null)
+    setActiveRequestUpdate({
+      requestId: request.request_id,
+      form: buildRequestUpdateForm(request)
+    })
+  }
+
+  const updateRequestForm = (updates: Partial<RequestUpdateFormState>) => {
+    setActiveRequestUpdate((current) =>
+      current ? { ...current, form: { ...current.form, ...updates } } : current
+    )
+  }
+
+  const handleSaveRequestUpdate = async () => {
+    if (!activeRequestUpdate || isUpdatingRequest) return
+    const selectedRequestType = requestTypeOptions.find(
+      (option) => option.id === activeRequestUpdate.form.requestTypeId
+    )
+
+    setIsUpdatingRequest(true)
+    setRequestUpdateError(null)
+    try {
+      const updatedRequest = (await updateAdminRequest(activeRequestUpdate.requestId, {
+        reporter_email: blankToNull(activeRequestUpdate.form.reporterEmail),
+        title: activeRequestUpdate.form.title.trim(),
+        description: activeRequestUpdate.form.description.trim(),
+        urgency: activeRequestUpdate.form.urgency,
+        status: activeRequestUpdate.form.status,
+        location: {
+          site: blankToNull(activeRequestUpdate.form.site),
+          building: blankToNull(activeRequestUpdate.form.building),
+          floor: blankToNull(activeRequestUpdate.form.floor),
+          room: blankToNull(activeRequestUpdate.form.room),
+          free_text: blankToNull(activeRequestUpdate.form.locationFreeText)
+        },
+        taxonomy: selectedRequestType
+          ? {
+              facilities_area: blankToNull(selectedRequestType.facilityAreaId),
+              impacted_service: blankToNull(selectedRequestType.impactedServiceId),
+              request_type: selectedRequestType.id
+            }
+          : {
+              facilities_area: null,
+              impacted_service: null,
+              request_type: null
+            }
+      })) as RequestItem
+
+      setRequests((current) =>
+        current.map((request) => (request.request_id === updatedRequest.request_id ? updatedRequest : request))
+      )
+      const nextStats = await fetchStats().catch(() => null)
+      if (nextStats) {
+        setStats(nextStats)
+      }
+      setActiveRequestUpdate(null)
+    } catch (error) {
+      setRequestUpdateError(extractErrorMessage(error, 'Failed to update request.'))
+    } finally {
+      setIsUpdatingRequest(false)
+    }
   }
 
   const handleExport = async () => {
@@ -497,6 +637,13 @@ export default function AdminView() {
   const selectedService = useMemo(
     () => selectedFacility?.impacted_services?.find((service) => service.id === taxonomyForm.serviceId) || null,
     [selectedFacility, taxonomyForm.serviceId]
+  )
+
+  const requestTypeOptions = useMemo(() => getRequestTypeOptions(taxonomyPreview), [taxonomyPreview])
+
+  const activeRequest = useMemo(
+    () => requests.find((request) => request.request_id === activeRequestUpdate?.requestId) || null,
+    [activeRequestUpdate?.requestId, requests]
   )
 
   const taxonomyInputTips = useMemo(() => {
@@ -981,13 +1128,20 @@ export default function AdminView() {
                       <strong>Dialog ID:</strong> {request.dialog_id || request.request_id}
                     </span>
                   </div>
-                  <div className="request-meta">
+                  <div className="request-meta request-actions">
                     <button
                       type="button"
                       className="btn primary"
                       onClick={() => void handleOpenConversation(request)}
                     >
                       View conversation
+                    </button>
+                    <button
+                      type="button"
+                      className="btn subtle"
+                      onClick={() => handleOpenRequestUpdate(request)}
+                    >
+                      Update
                     </button>
                   </div>
                 </article>
@@ -996,6 +1150,177 @@ export default function AdminView() {
           )}
         </div>
       </section>
+
+      {activeRequestUpdate ? (
+        <div className="modal-overlay" onClick={() => setActiveRequestUpdate(null)}>
+          <div className="modal request-update-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h4>Update: {activeRequest?.title || activeRequestUpdate.requestId}</h4>
+              <button type="button" onClick={() => setActiveRequestUpdate(null)} className="btn subtle">
+                Close
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="request-update-form">
+                <label className="form-label" htmlFor="request-update-email">
+                  Reporter email
+                </label>
+                <input
+                  id="request-update-email"
+                  className="text-input"
+                  value={activeRequestUpdate.form.reporterEmail}
+                  onChange={(event) => updateRequestForm({ reporterEmail: event.target.value })}
+                />
+
+                <label className="form-label" htmlFor="request-update-title">
+                  Title
+                </label>
+                <input
+                  id="request-update-title"
+                  className="text-input"
+                  value={activeRequestUpdate.form.title}
+                  onChange={(event) => updateRequestForm({ title: event.target.value })}
+                />
+
+                <label className="form-label" htmlFor="request-update-description">
+                  Description
+                </label>
+                <textarea
+                  id="request-update-description"
+                  className="text-input request-update-textarea"
+                  value={activeRequestUpdate.form.description}
+                  onChange={(event) => updateRequestForm({ description: event.target.value })}
+                />
+
+                <label className="form-label" htmlFor="request-update-urgency">
+                  Urgency
+                </label>
+                <select
+                  id="request-update-urgency"
+                  className="text-input"
+                  value={activeRequestUpdate.form.urgency}
+                  onChange={(event) => updateRequestForm({ urgency: event.target.value })}
+                >
+                  {getOptionValues(REQUEST_URGENCY_OPTIONS, activeRequestUpdate.form.urgency).map((value) => (
+                    <option value={value} key={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+
+                <label className="form-label" htmlFor="request-update-status">
+                  Status
+                </label>
+                <select
+                  id="request-update-status"
+                  className="text-input"
+                  value={activeRequestUpdate.form.status}
+                  onChange={(event) => updateRequestForm({ status: event.target.value })}
+                >
+                  {getOptionValues(REQUEST_STATUS_OPTIONS, activeRequestUpdate.form.status).map((value) => (
+                    <option value={value} key={value}>
+                      {value.replace('_', ' ')}
+                    </option>
+                  ))}
+                </select>
+
+                <label className="form-label" htmlFor="request-update-site">
+                  Site
+                </label>
+                <input
+                  id="request-update-site"
+                  className="text-input"
+                  value={activeRequestUpdate.form.site}
+                  onChange={(event) => updateRequestForm({ site: event.target.value })}
+                />
+
+                <label className="form-label" htmlFor="request-update-building">
+                  Building
+                </label>
+                <input
+                  id="request-update-building"
+                  className="text-input"
+                  value={activeRequestUpdate.form.building}
+                  onChange={(event) => updateRequestForm({ building: event.target.value })}
+                />
+
+                <label className="form-label" htmlFor="request-update-floor">
+                  Floor
+                </label>
+                <input
+                  id="request-update-floor"
+                  className="text-input"
+                  value={activeRequestUpdate.form.floor}
+                  onChange={(event) => updateRequestForm({ floor: event.target.value })}
+                />
+
+                <label className="form-label" htmlFor="request-update-room">
+                  Room
+                </label>
+                <input
+                  id="request-update-room"
+                  className="text-input"
+                  value={activeRequestUpdate.form.room}
+                  onChange={(event) => updateRequestForm({ room: event.target.value })}
+                />
+
+                <label className="form-label" htmlFor="request-update-location-free-text">
+                  Location note
+                </label>
+                <input
+                  id="request-update-location-free-text"
+                  className="text-input"
+                  value={activeRequestUpdate.form.locationFreeText}
+                  onChange={(event) => updateRequestForm({ locationFreeText: event.target.value })}
+                />
+
+                <label className="form-label" htmlFor="request-update-request-type">
+                  Request type
+                </label>
+                <select
+                  id="request-update-request-type"
+                  className="text-input"
+                  value={activeRequestUpdate.form.requestTypeId}
+                  onChange={(event) => updateRequestForm({ requestTypeId: event.target.value })}
+                >
+                  <option value={UNKNOWN_REQUEST_TYPE_VALUE}>Unknown</option>
+                  {activeRequestUpdate.form.requestTypeId !== UNKNOWN_REQUEST_TYPE_VALUE &&
+                  !requestTypeOptions.some((option) => option.id === activeRequestUpdate.form.requestTypeId) ? (
+                    <option value={activeRequestUpdate.form.requestTypeId}>
+                      {activeRequestUpdate.form.requestTypeId}
+                    </option>
+                  ) : null}
+                  {requestTypeOptions.map((option) => (
+                    <option value={option.id} key={option.id}>
+                      {option.label} ({option.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {requestUpdateError ? <p className="error-text">{requestUpdateError}</p> : null}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn subtle"
+                  onClick={() => setActiveRequestUpdate(null)}
+                  disabled={isUpdatingRequest}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => void handleSaveRequestUpdate()}
+                  disabled={isUpdatingRequest}
+                >
+                  {isUpdatingRequest ? 'Saving...' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {activeConversation ? (
         <div className="modal-overlay" onClick={() => setActiveConversation(null)}>

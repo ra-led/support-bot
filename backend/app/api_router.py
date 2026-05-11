@@ -10,7 +10,7 @@ from .auth import assert_admin_password
 from .dialog_agent import dialog_agent
 from .export_utils import build_issues_export_file
 from .request_utils import apply_answers_to_request
-from .schemas import AnalyticsSchemaUpdate, ClarifyRequest, IntakeRequest, TaxonomyUpdate
+from .schemas import AdminRequestUpdate, AnalyticsSchemaUpdate, ClarifyRequest, IntakeRequest, TaxonomyUpdate
 from .storage import storage
 from .transcription import transcribe_audio as transcribe_audio_with_llm
 
@@ -269,6 +269,32 @@ async def get_request_messages(
     else:
         assert_admin_password(x_admin_password)
     return {"request_id": request_id, "messages": storage.list_messages(request_id)}
+
+
+@router.put("/v1/admin/requests/{request_id}")
+async def admin_update_request(
+    request_id: str,
+    payload: AdminRequestUpdate,
+    x_admin_password: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    assert_admin_password(x_admin_password)
+    request = storage.get_request(request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    updates = payload.dict(exclude_unset=True)
+    if "location" in updates:
+        updates["location"] = {
+            **(request.get("location") if isinstance(request.get("location"), dict) else {}),
+            **(updates.get("location") or {}),
+        }
+    if "taxonomy" in updates:
+        updates["taxonomy"] = {
+            **(request.get("taxonomy") if isinstance(request.get("taxonomy"), dict) else {}),
+            **(updates.get("taxonomy") or {}),
+        }
+
+    return storage.update_request(request_id, updates)
 
 
 @router.get("/v1/taxonomy")

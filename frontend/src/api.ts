@@ -208,6 +208,23 @@ export async function updateAdminTaxonomy(facilitiesAreas: unknown[]) {
   return response.data as { facilities_areas: unknown[]; taxonomy_version?: number }
 }
 
+export interface AdminRequestUpdatePayload {
+  reporter_email?: string | null
+  title?: string
+  description?: string
+  urgency?: string
+  status?: string
+  location?: Record<string, string | null>
+  taxonomy?: Record<string, string | null>
+}
+
+export async function updateAdminRequest(requestId: string, payload: AdminRequestUpdatePayload) {
+  const response = await api.put(`/v1/admin/requests/${requestId}`, payload, {
+    headers: getAdminHeaders()
+  })
+  return response.data
+}
+
 export async function fetchRequests() {
   const response = await api.get('/v1/requests', {
     headers: getAdminHeaders()

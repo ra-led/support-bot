@@ -236,7 +236,35 @@ class DialogAgent:
             req["missing_required_fields"] = [slot.get("name") for slot in target_slots if int(slot.get("budget", 0)) > 0]
             return AgentResult(request=req)
 
-        # Parse after all slots were discussed
+        return self.finalize_from_history(
+            request=req,
+            history=history,
+            taxonomy=taxonomy,
+            status="ready",
+            clarifying_questions=[
+                "Thanks, I have enough details.\n\n"
+                "Title: {title}\n"
+                "Details: {description}\n\n"
+                "Shall we submit it?"
+            ],
+        )
+
+    def finalize_from_history(
+        self,
+        request: Dict[str, Any],
+        history: List[Dict[str, Any]],
+        taxonomy: List[Dict[str, Any]],
+        status: str = "ready",
+        clarifying_questions: List[str] | None = None,
+        abandoned: bool = False,
+    ) -> AgentResult:
+        if not self.api_key:
+            raise RuntimeError("OPENAI_API_KEY is required")
+
+        req = copy.deepcopy(request)
+        dialog_state = req.get("dialog_state") if isinstance(req.get("dialog_state"), dict) else {}
+        conversation_history = self._history_to_text(history)
+
         issue = self._openrouter_call(
             request_id=str(req.get("request_id") or ""),
             prompt=ISSUE_SUMMARY_PROMPT.format(conversation_history=conversation_history),
@@ -308,17 +336,16 @@ class DialogAgent:
 
         dialog_state["phase"] = "ready_for_submit"
         dialog_state["problem"] = {"text": description, "confirmed": True}
+        if abandoned:
+            dialog_state["abandoned"] = True
+            dialog_state["phase"] = "abandoned_submitted"
         req["dialog_state"] = dialog_state
-        req["status"] = "ready"
+        req["status"] = status
         req["missing_required_fields"] = []
-        req["clarifying_questions"] = [
-            (
-                "Thanks, I have enough details.\n\n"
-                f"Title: {title}\n"
-                f"Details: {description}\n\n"
-                "Shall we submit it?"
-            )
-        ]
+        rendered_questions = []
+        for question in clarifying_questions or []:
+            rendered_questions.append(question.format(title=title, description=description))
+        req["clarifying_questions"] = rendered_questions
         return AgentResult(request=req)
 
     def _openrouter_call(

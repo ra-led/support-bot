@@ -652,6 +652,26 @@ class Storage:
         rows = cursor.fetchall()
         return [self._row_to_request(row) for row in rows]
 
+    def list_stale_requests(self, statuses: List[str], cutoff_created_at: str) -> List[Dict[str, Any]]:
+        if not statuses:
+            return []
+        placeholders = ",".join("?" for _ in statuses)
+        cursor = self.conn.cursor()
+        cursor.execute(
+            f"""
+            SELECT r.*
+            FROM requests r
+            LEFT JOIN conversation_messages cm ON cm.request_id = r.request_id
+            WHERE r.status IN ({placeholders})
+            GROUP BY r.request_id
+            HAVING COALESCE(MAX(cm.created_at), r.created_at) <= ?
+            ORDER BY r.created_at ASC
+            """,
+            (*statuses, cutoff_created_at),
+        )
+        rows = cursor.fetchall()
+        return [self._row_to_request(row) for row in rows]
+
     def add_message(self, request_id: str, sender: str, content: str) -> None:
         cursor = self.conn.cursor()
         cursor.execute(
