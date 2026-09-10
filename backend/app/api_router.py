@@ -3,14 +3,14 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from .auth import assert_admin_password
 from .dialog_agent import dialog_agent
 from .export_utils import build_issues_export_file
 from .request_utils import apply_answers_to_request
-from .schemas import AdminRequestUpdate, AnalyticsSchemaUpdate, ClarifyRequest, IntakeRequest, TaxonomyUpdate
+from .schemas import AdminRequestArchiveUpdate, AdminRequestUpdate, AnalyticsSchemaUpdate, ClarifyRequest, IntakeRequest, TaxonomyUpdate
 from .storage import storage
 from .transcription import transcribe_audio as transcribe_audio_with_llm
 
@@ -22,7 +22,7 @@ ACTIVE_REQUEST_STATUSES = {"needs_clarification"}
 
 
 def _is_request_active(request: Dict[str, Any]) -> bool:
-    return request.get("status") in ACTIVE_REQUEST_STATUSES
+    return request.get("status") in ACTIVE_REQUEST_STATUSES and not request.get("archived_at")
 
 
 def _matches_thread(request: Dict[str, Any], thread_id: Optional[str]) -> bool:
@@ -184,6 +184,8 @@ async def clarify_request(request_id: str, payload: ClarifyRequest) -> Dict[str,
     request = storage.get_request(request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
+    if request.get("archived_at"):
+        raise HTTPException(status_code=409, detail="Request is archived. Please start a new request.")
 
     working_request = request
     if payload.answers:
@@ -226,6 +228,8 @@ async def submit_request(request_id: str) -> Dict[str, Any]:
     request = storage.get_request(request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
+    if request.get("archived_at"):
+        raise HTTPException(status_code=409, detail="Request is archived. Please start a new request.")
     if not _is_valid_for_submit(request):
         raise HTTPException(
             status_code=409,
@@ -269,6 +273,29 @@ async def get_request_messages(
     else:
         assert_admin_password(x_admin_password)
     return {"request_id": request_id, "messages": storage.list_messages(request_id)}
+
+
+@router.get("/v1/admin/requests")
+async def admin_list_requests(
+    page: int = Query(default=1, ge=1),
+    archived: bool = False,
+    x_admin_password: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    assert_admin_password(x_admin_password)
+    return storage.list_admin_requests(page=page, archived=archived)
+
+
+@router.put("/v1/admin/requests/{request_id}/archive")
+async def admin_archive_request(
+    request_id: str,
+    payload: AdminRequestArchiveUpdate,
+    x_admin_password: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    assert_admin_password(x_admin_password)
+    try:
+        return storage.set_request_archived(request_id, payload.archived)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Request not found") from error
 
 
 @router.put("/v1/admin/requests/{request_id}")
@@ -346,13 +373,7 @@ async def update_analytics_schema(payload: AnalyticsSchemaUpdate) -> Dict[str, A
 @router.get("/v1/admin/stats")
 async def admin_stats(x_admin_password: Optional[str] = Header(default=None)) -> Dict[str, Any]:
     assert_admin_password(x_admin_password)
-    requests = storage.list_requests()
-    by_status: Dict[str, int] = {}
-    for request in requests:
-        status = request.get("status", "unknown")
-        by_status[status] = by_status.get(status, 0) + 1
-
-    return {"total_requests": len(requests), "by_status": by_status}
+    return storage.get_admin_request_overview()["stats"]
 
 
 @router.get("/v1/admin/traces/{dialog_id}")

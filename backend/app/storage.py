@@ -410,6 +410,12 @@ class Storage:
         )
         self.conn.commit()
         self._ensure_column("requests", "dialog_state_json", "TEXT")
+        self._ensure_column("requests", "archived_at", "TEXT")
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS requests_archive_created_idx "
+            "ON requests (archived_at, created_at DESC, request_id DESC)"
+        )
+        self.conn.commit()
 
     def _ensure_column(self, table_name: str, column_name: str, column_sql: str) -> None:
         cursor = self.conn.cursor()
@@ -628,6 +634,7 @@ class Storage:
             "confidence": self._json_load(row["confidence_json"]) or {},
             "dialog_state": self._json_load(row["dialog_state_json"]) or {},
             "status": row["status"],
+            "archived_at": row["archived_at"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
@@ -652,6 +659,58 @@ class Storage:
         rows = cursor.fetchall()
         return [self._row_to_request(row) for row in rows]
 
+    def get_admin_request_overview(self) -> Dict[str, Any]:
+        rows = self.conn.execute("SELECT request_id, status, archived_at FROM requests").fetchall()
+        by_status: Dict[str, int] = {}
+        active_ids = []
+        for row in rows:
+            status = row["status"] or "unknown"
+            by_status[status] = by_status.get(status, 0) + 1
+            if row["archived_at"] is None:
+                active_ids.append(row["request_id"])
+        return {
+            "stats": {
+                "total_requests": len(rows),
+                "by_status": by_status,
+                "active_requests": len(active_ids),
+                "archived_requests": len(rows) - len(active_ids),
+            },
+            # Keep the existing browser's NEW snapshot independent of pagination.
+            "dialog_ids": [row["request_id"] for row in rows],
+            "active_dialog_ids": active_ids,
+        }
+
+    def list_admin_requests(self, page: int = 1, archived: bool = False) -> Dict[str, Any]:
+        page_size = 20
+        overview = self.get_admin_request_overview()
+        total = overview["stats"]["archived_requests" if archived else "active_requests"]
+        page = max(1, min(page, (total + page_size - 1) // page_size or 1))
+        archive_filter = "IS NOT NULL" if archived else "IS NULL"
+        rows = self.conn.execute(
+            f"SELECT * FROM requests WHERE archived_at {archive_filter} "
+            "ORDER BY created_at DESC, request_id DESC LIMIT ? OFFSET ?",
+            (page_size, (page - 1) * page_size),
+        ).fetchall()
+        return {
+            **overview,
+            "requests": [self._row_to_request(row) for row in rows],
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+        }
+
+    def set_request_archived(self, request_id: str, archived: bool) -> Dict[str, Any]:
+        # Only archive metadata changes: status, timestamps, extracted fields and history stay intact.
+        cursor = self.conn.execute(
+            "UPDATE requests SET archived_at = COALESCE(archived_at, ?) WHERE request_id = ?"
+            if archived else "UPDATE requests SET archived_at = ? WHERE request_id = ?",
+            (dt.datetime.utcnow().isoformat() if archived else None, request_id),
+        )
+        self.conn.commit()
+        if cursor.rowcount == 0:
+            raise KeyError("Request not found")
+        return self.get_request(request_id)
+
     def list_stale_requests(self, statuses: List[str], cutoff_created_at: str) -> List[Dict[str, Any]]:
         if not statuses:
             return []
@@ -662,7 +721,7 @@ class Storage:
             SELECT r.*
             FROM requests r
             LEFT JOIN conversation_messages cm ON cm.request_id = r.request_id
-            WHERE r.status IN ({placeholders})
+            WHERE r.status IN ({placeholders}) AND r.archived_at IS NULL
             GROUP BY r.request_id
             HAVING COALESCE(MAX(cm.created_at), r.created_at) <= ?
             ORDER BY r.created_at ASC

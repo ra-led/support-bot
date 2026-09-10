@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 
 class UserContext(BaseModel):
@@ -42,3 +42,7 @@ class AdminRequestUpdate(BaseModel):
     status: Optional[str] = None
     location: Optional[Dict[str, Any]] = None
     taxonomy: Optional[Dict[str, Any]] = None
+
+
+class AdminRequestArchiveUpdate(BaseModel):
+    archived: StrictBool

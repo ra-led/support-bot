@@ -225,8 +225,16 @@ export async function updateAdminRequest(requestId: string, payload: AdminReques
   return response.data
 }
 
-export async function fetchRequests() {
-  const response = await api.get('/v1/requests', {
+export async function setAdminRequestArchived(requestId: string, archived: boolean) {
+  const response = await api.put(`/v1/admin/requests/${requestId}/archive`, { archived }, {
+    headers: getAdminHeaders()
+  })
+  return response.data
+}
+
+export async function fetchRequests(page = 1, archived = false) {
+  const response = await api.get('/v1/admin/requests', {
+    params: { page, archived },
     headers: getAdminHeaders()
   })
   return response.data

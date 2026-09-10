@@ -645,6 +645,10 @@ a {
   flex-wrap: wrap;
 }
 
+.admin-view .admin-requests {
+  scroll-margin-top: 76px;
+}
+
 .admin-actions {
   display: inline-flex;
   gap: 8px;
@@ -891,6 +895,101 @@ a {
 
 .request-actions {
   align-items: center;
+}
+
+.admin-view .request-tabs {
+  display: flex;
+  gap: 20px;
+  margin-top: 14px;
+  border-bottom: 1px solid #d8e2ef;
+}
+
+.admin-view .request-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-view .request-tabs button[aria-selected='true'] {
+  border-bottom-color: #1d4ed8;
+  color: #1d4ed8;
+}
+
+.admin-view .request-tabs button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.admin-view .request-tabs span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-view .request-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  font-size: 12px;
+}
+
+.admin-view .request-page-controls,
+.admin-view .request-page-select,
+.admin-view .request-archive-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-view .request-page-select select {
+  min-width: 52px;
+  height: 32px;
+  border: 1px solid #d8e2ef;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+
+.admin-view .request-page-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+}
+
+.admin-view .request-list-notice {
+  min-height: 20px;
+  margin-top: 8px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.admin-view .request-list-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-view .request-title-main,
+.admin-view .request-card p,
+.admin-view .request-meta span {
+  overflow-wrap: anywhere;
 }
 
 .modal-overlay {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Archive, ArchiveRestore, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   clearAdminPassword,
   downloadIssuesExport,
@@ -8,12 +9,15 @@ import {
   fetchStats,
   getAdminPassword,
   setAdminPassword,
+  setAdminRequestArchived,
   updateAdminRequest,
   updateAdminTaxonomy
 } from '../api'
 
 interface StatsResponse {
   total_requests: number
+  active_requests: number
+  archived_requests: number
   by_status: Record<string, number>
 }
 
@@ -22,6 +26,7 @@ interface RequestItem {
   dialog_id?: string
   created_at?: string
   updated_at?: string
+  archived_at?: string | null
   title: string
   description: string
   urgency: string
@@ -46,6 +51,53 @@ interface RequestItem {
 interface TaxonomyRequestType {
   id?: string
   label?: string
+}
+
+interface RequestPageResponse {
+  requests: RequestItem[]
+  page: number
+  page_size: number
+  total: number
+  stats: StatsResponse
+  dialog_ids: string[]
+  active_dialog_ids: string[]
+}
+
+function RequestPagination({ page, total, pageSize, disabled, onChange }: {
+  page: number
+  total: number
+  pageSize: number
+  disabled: boolean
+  onChange: (page: number) => void
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  return (
+    <nav className="request-pagination" aria-label="Request pages">
+      <span className="muted">
+        {total ? `${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)} of ${total}` : '0 requests'}
+      </span>
+      <div className="request-page-controls">
+        <button type="button" className="btn subtle request-page-arrow" title="Previous page" aria-label="Previous page"
+          disabled={disabled || page <= 1} onClick={() => onChange(page - 1)}>
+          <ChevronLeft size={16} aria-hidden="true" />
+        </button>
+        <label className="request-page-select">
+          Page
+          <select aria-label="Page" value={page} disabled={disabled || pageCount === 1}
+            onChange={(event) => onChange(Number(event.target.value))}>
+            {Array.from({ length: pageCount }, (_, index) => (
+              <option key={index + 1} value={index + 1}>{index + 1}</option>
+            ))}
+          </select>
+          of {pageCount}
+        </label>
+        <button type="button" className="btn subtle request-page-arrow" title="Next page" aria-label="Next page"
+          disabled={disabled || page >= pageCount} onClick={() => onChange(page + 1)}>
+          <ChevronRight size={16} aria-hidden="true" />
+        </button>
+      </div>
+    </nav>
+  )
 }
 
 interface TaxonomyImpactedService {
@@ -428,6 +480,16 @@ export default function AdminView() {
   const [isAuthenticating, setIsAuthenticating] = useState(false)
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [requests, setRequests] = useState<RequestItem[]>([])
+  const [requestPage, setRequestPage] = useState(1)
+  const [requestTotal, setRequestTotal] = useState(0)
+  const [requestPageSize, setRequestPageSize] = useState(20)
+  const [showArchive, setShowArchive] = useState(false)
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false)
+  const [archivingRequestId, setArchivingRequestId] = useState<string | null>(null)
+  const [requestListError, setRequestListError] = useState<string | null>(null)
+  const [requestListNotice, setRequestListNotice] = useState<string | null>(null)
+  const requestSectionRef = useRef<HTMLElement | null>(null)
+  const requestListBusy = isLoadingRequests || archivingRequestId !== null
   const [newDialogIds, setNewDialogIds] = useState<Set<string>>(new Set())
   const [activeConversation, setActiveConversation] = useState<{
     requestId: string
@@ -451,30 +513,90 @@ export default function AdminView() {
   const [isTaxonomyCollapsed, setIsTaxonomyCollapsed] = useState(true)
   const initialDialogSnapshotRef = useRef<DialogViewSnapshot | null>(null)
 
+  const applyRequestPage = (response: RequestPageResponse, archived: boolean) => {
+    const snapshot = initialDialogSnapshotRef.current
+    setStats(response.stats)
+    setRequests(response.requests)
+    setRequestPage(response.page)
+    setRequestPageSize(response.page_size)
+    setRequestTotal(response.total)
+    setShowArchive(archived)
+    setNewDialogIds(snapshot?.hasBaseline
+      ? new Set(response.active_dialog_ids.filter((id) => !snapshot.ids.has(id)))
+      : new Set())
+    writeViewedDialogSnapshot(response.dialog_ids)
+  }
+
+  const loadRequestPage = async (page: number, archived: boolean) => {
+    const response = await fetchRequests(page, archived) as RequestPageResponse
+    applyRequestPage(response, archived)
+  }
+
+  const handleRequestPage = async (page: number, archived = showArchive) => {
+    if (requestListBusy) return
+    setIsLoadingRequests(true)
+    setRequestListError(null)
+    setRequestListNotice(null)
+    try {
+      await loadRequestPage(page, archived)
+      requestSectionRef.current?.scrollIntoView({ block: 'start' })
+    } catch (error) {
+      setRequestListError(extractErrorMessage(error, 'Failed to load requests. Please try again.'))
+    } finally {
+      setIsLoadingRequests(false)
+    }
+  }
+
+  const handleArchiveRequest = async (request: RequestItem) => {
+    if (requestListBusy) return
+    const archived = !request.archived_at
+    setArchivingRequestId(request.request_id)
+    setRequestListError(null)
+    setRequestListNotice(null)
+    try {
+      await setAdminRequestArchived(request.request_id, archived)
+      setRequests((current) => current.filter((item) => item.request_id !== request.request_id))
+      const nextTotal = Math.max(0, requestTotal - 1)
+      const nextPage = Math.min(requestPage, Math.max(1, Math.ceil(nextTotal / requestPageSize)))
+      setRequestTotal(nextTotal)
+      setRequestPage(nextPage)
+      setStats((current) => current ? {
+        ...current,
+        active_requests: current.active_requests + (archived ? -1 : 1),
+        archived_requests: current.archived_requests + (archived ? 1 : -1)
+      } : current)
+      if (archived) setNewDialogIds((current) => {
+        const next = new Set(current)
+        next.delete(getDialogId(request))
+        return next
+      })
+      setRequestListNotice(archived ? 'Request moved to archive.' : 'Request restored.')
+      try {
+        await loadRequestPage(nextPage, showArchive)
+      } catch {
+        setRequestListError('Change saved, but the list could not be refreshed. Please retry.')
+      }
+    } catch (error) {
+      setRequestListError(extractErrorMessage(error, 'Failed to move request. Please try again.'))
+    } finally {
+      setArchivingRequestId(null)
+    }
+  }
+
   const loadAdminData = async () => {
     if (!initialDialogSnapshotRef.current) {
       initialDialogSnapshotRef.current = readViewedDialogSnapshot()
     }
 
-    const [statsResponse, requestsResponse, taxonomyResponse] = await Promise.all([
-      fetchStats(),
+    const [requestsResponse, taxonomyResponse] = await Promise.all([
       fetchRequests(),
       fetchAdminTaxonomy()
     ])
-    const loadedRequests = (requestsResponse.requests || []) as RequestItem[]
-    const currentDialogIds = Array.from(new Set(loadedRequests.map(getDialogId).filter(Boolean)))
-    const initialSnapshot = initialDialogSnapshotRef.current
-    const nextNewDialogIds = initialSnapshot.hasBaseline
-      ? new Set(currentDialogIds.filter((dialogId) => !initialSnapshot.ids.has(dialogId)))
-      : new Set<string>()
     const facilitiesAreas = Array.isArray(taxonomyResponse.facilities_areas)
       ? (taxonomyResponse.facilities_areas as TaxonomyFacilityArea[])
       : []
 
-    setStats(statsResponse)
-    setRequests(loadedRequests)
-    setNewDialogIds(nextNewDialogIds)
-    writeViewedDialogSnapshot(currentDialogIds)
+    applyRequestPage(requestsResponse, false)
     setTaxonomyPreview(facilitiesAreas)
     setTaxonomyVersion(taxonomyResponse.taxonomy_version ?? null)
     setTaxonomyForm(getDefaultTaxonomyForm(facilitiesAreas))
@@ -525,6 +647,11 @@ export default function AdminView() {
     setAdminPasswordInput('')
     setStats(null)
     setRequests([])
+    setRequestPage(1)
+    setRequestTotal(0)
+    setShowArchive(false)
+    setRequestListError(null)
+    setRequestListNotice(null)
     setNewDialogIds(new Set())
     setActiveConversation(null)
     setActiveRequestUpdate(null)
@@ -776,7 +903,7 @@ export default function AdminView() {
             >
               {isExporting ? 'Exporting...' : 'Export issues to Excel'}
             </button>
-            <button type="button" className="btn subtle" onClick={handleLogout}>
+            <button type="button" className="btn subtle" disabled={requestListBusy} onClick={handleLogout}>
               Log out
             </button>
           </div>
@@ -1071,14 +1198,36 @@ export default function AdminView() {
         ) : null}
       </section>
 
-      <section className="panel admin-requests">
+      <section className="panel admin-requests" ref={requestSectionRef}>
         <div className="admin-requests-header">
           <h2>Extracted Requests</h2>
           {newDialogIds.size > 0 ? <span className="new-dialog-summary">{newDialogIds.size} new</span> : null}
         </div>
-        <div className="request-list">
+        <div className="request-tabs" role="tablist" aria-label="Request archive status">
+          {[false, true].map((archived) => (
+            <button key={String(archived)} type="button" role="tab"
+              id={archived ? 'archive-requests-tab' : 'active-requests-tab'}
+              aria-selected={showArchive === archived} aria-controls="admin-request-list"
+              disabled={requestListBusy} onClick={() => void handleRequestPage(1, archived)}>
+              {archived ? 'Archive' : 'Active'}
+              <span>{archived ? stats?.archived_requests ?? 0 : stats?.active_requests ?? 0}</span>
+            </button>
+          ))}
+        </div>
+        {requestListError ? <div className="request-list-error" role="alert">
+          <p className="error-text">{requestListError}</p>
+          <button type="button" className="btn subtle" disabled={requestListBusy}
+            onClick={() => void handleRequestPage(requestPage)}>Retry</button>
+        </div> : null}
+        <div className="request-list-notice" role="status">
+          {requestListBusy ? 'Loading requests...' : requestListNotice}
+        </div>
+        <RequestPagination page={requestPage} total={requestTotal} pageSize={requestPageSize}
+          disabled={requestListBusy} onChange={(page) => void handleRequestPage(page)} />
+        <div className="request-list" id="admin-request-list" role="tabpanel" aria-busy={requestListBusy}
+          aria-labelledby={showArchive ? 'archive-requests-tab' : 'active-requests-tab'}>
           {requests.length === 0 ? (
-            <p className="muted">No requests yet.</p>
+            <p className="muted">{showArchive ? 'No archived requests.' : 'No active requests.'}</p>
           ) : (
             requests.map((request) => {
               const isNewDialog = newDialogIds.has(getDialogId(request))
@@ -1132,6 +1281,7 @@ export default function AdminView() {
                     <button
                       type="button"
                       className="btn primary"
+                      disabled={requestListBusy}
                       onClick={() => void handleOpenConversation(request)}
                     >
                       View conversation
@@ -1139,9 +1289,15 @@ export default function AdminView() {
                     <button
                       type="button"
                       className="btn subtle"
+                      disabled={requestListBusy}
                       onClick={() => handleOpenRequestUpdate(request)}
                     >
                       Update
+                    </button>
+                    <button type="button" className="btn subtle request-archive-button"
+                      disabled={requestListBusy} onClick={() => void handleArchiveRequest(request)}>
+                      {showArchive ? <ArchiveRestore size={15} aria-hidden="true" /> : <Archive size={15} aria-hidden="true" />}
+                      {archivingRequestId === request.request_id ? 'Saving...' : showArchive ? 'Restore' : 'Archive'}
                     </button>
                   </div>
                 </article>
@@ -1149,6 +1305,10 @@ export default function AdminView() {
             })
           )}
         </div>
+        {requestTotal > requestPageSize ? (
+          <RequestPagination page={requestPage} total={requestTotal} pageSize={requestPageSize}
+            disabled={requestListBusy} onChange={(page) => void handleRequestPage(page)} />
+        ) : null}
       </section>
 
       {activeRequestUpdate ? (

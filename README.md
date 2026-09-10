@@ -101,6 +101,20 @@ Provides additional text or answers to missing slots.
 
 Returns a simple count of requests by status.
 
+### Admin request archive
+
+- `GET /v1/admin/requests?page=1&archived=false` returns 20 active requests per page; use `archived=true` for the archive. Both lists are ordered by conversation start time, newest first.
+- `PUT /v1/admin/requests/{request_id}/archive` with `{"archived": true}` archives a request; `{"archived": false}` restores it. These endpoints require `X-Admin-Password`.
+- Archiving only changes `archived_at`. Request fields, workflow status, original timestamps, messages and traces are retained. Archived requests remain in reporter history and the full Excel export, but are excluded from automatic follow-up processing and active-dialog reuse.
+- The database migration adds a nullable column and an index on startup. Existing requests start in Active. Coolify's existing `backend_data` volume and `/data/data.db` path are unchanged; retain that volume on redeploy and take a normal database backup beforehand.
+- The NEW count covers active requests across all pages, using the existing browser-local previous-visit snapshot.
+
+Run archive, pagination and legacy-database migration tests from `backend`:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
 ### GET `/v1/admin/export/issues.xlsx`
 
 Downloads full issues history as Excel for analytics (parsed request fields only, no conversation messages).
